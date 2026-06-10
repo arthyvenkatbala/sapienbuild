@@ -1,54 +1,51 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { supabase } from "@/lib/supabase";
+import { internalLeadSchema } from "@/lib/validation";
 
 export async function POST(request: Request) {
+  let raw: unknown;
   try {
-    const body = await request.json();
-
-    const {
-      clientname,
-      phone,
-      email,
-      source,
-      eventtype,
-      campaign,
-    } = body;
-
-    const { data, error } = await supabase
-      .from("leads")
-      .insert([
-        {
-          clientname,
-          phone,
-          email,
-          source,
-          eventtype,
-          campaign,
-          status: "New Lead",
-        },
-      ])
-      .select();
-
-    if (error) {
-      console.log(error);
-
-      return NextResponse.json(
-        { error: error.message },
-        { status: 500 }
-      );
-    }
-
-    return NextResponse.json({
-      success: true,
-      lead: data,
-    });
-
-  } catch (err) {
-    console.log(err);
-
+    raw = await request.json();
+  } catch {
     return NextResponse.json(
-      { error: "Something went wrong" },
-      { status: 500 }
+      { error: "Invalid request body." },
+      { status: 400 }
     );
   }
+
+  const parsed = internalLeadSchema.safeParse(raw);
+  if (!parsed.success) {
+    return NextResponse.json(
+      {
+        error: "Validation failed.",
+        fields: z.flattenError(parsed.error).fieldErrors,
+      },
+      { status: 422 }
+    );
+  }
+
+  const { clientname, phone, email, source, eventtype, campaign } = parsed.data;
+
+  const { data, error } = await supabase
+    .from("leads")
+    .insert([
+      {
+        clientname,
+        phone,
+        email,
+        source: source ?? "Internal",
+        eventtype,
+        campaign,
+        status: "New Lead",
+      },
+    ])
+    .select();
+
+  if (error) {
+    console.error("[leads] insert error:", error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ success: true, lead: data });
 }
