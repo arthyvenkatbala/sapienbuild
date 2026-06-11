@@ -108,3 +108,46 @@ CREATE POLICY "block_anon_leads" ON public.leads
 -- ── Migration: add website_url to existing clients table ──────────────────────
 -- Safe to run on an existing DB; does nothing if the column already exists.
 ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS website_url text;
+
+-- ── Migration: quotes table ───────────────────────────────────────────────────
+-- Run this block in the Supabase SQL editor to enable quote persistence.
+
+CREATE TABLE IF NOT EXISTS public.quotes (
+  id                text        PRIMARY KEY,
+  client_name       text        NOT NULL DEFAULT '',
+  client_phone      text        NOT NULL DEFAULT '',
+  client_email      text        NOT NULL DEFAULT '',
+  client_location   text        NOT NULL DEFAULT '',
+  event_types       jsonb       NOT NULL DEFAULT '[]',
+  event_dates       text        NOT NULL DEFAULT '',
+  venue_name        text        NOT NULL DEFAULT '',
+  executive_name    text        NOT NULL DEFAULT '',
+  executive_phone   text        NOT NULL DEFAULT '',
+  executive_email   text        NOT NULL DEFAULT '',
+  services          jsonb       NOT NULL DEFAULT '[]',
+  add_ons           jsonb       NOT NULL DEFAULT '[]',
+  discount_type     text        NOT NULL DEFAULT 'flat',
+  discount_value    numeric     NOT NULL DEFAULT 0,
+  subtotal          numeric     NOT NULL DEFAULT 0,
+  discount_amount   numeric     NOT NULL DEFAULT 0,
+  grand_total       numeric     NOT NULL DEFAULT 0,
+  notes             text        NOT NULL DEFAULT '',
+  status            text        NOT NULL DEFAULT 'Draft',
+  valid_until       text        NOT NULL DEFAULT '',
+  sent_at           text,
+  viewed_at         text,
+  approved_at       text,
+  signature_data    text,
+  follow_up_count   integer     NOT NULL DEFAULT 0,
+  ai_score          integer     NOT NULL DEFAULT 0,
+  ai_recommendation text        NOT NULL DEFAULT '',
+  created_at        timestamptz NOT NULL DEFAULT now(),
+  updated_at        timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS quotes_status_idx     ON public.quotes (status);
+CREATE INDEX IF NOT EXISTS quotes_created_at_idx ON public.quotes (created_at DESC);
+
+ALTER TABLE public.quotes ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "block_anon_quotes" ON public.quotes
+  FOR ALL TO anon USING (false);

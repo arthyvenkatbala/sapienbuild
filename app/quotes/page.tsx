@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
   Search, SlidersHorizontal, Download, Plus, X,
   FileText,
 } from "lucide-react";
 import {
-  Quote, QuoteStatus, initialQuotes, STATUS_META,
+  Quote, QuoteStatus, STATUS_META,
 } from "@/lib/quotes-data";
 import QuoteOverviewCards   from "@/components/quotes/QuoteOverviewCards";
 import QuotesTable          from "@/components/quotes/QuotesTable";
@@ -41,7 +41,8 @@ const STATUS_OPTIONS: (QuoteStatus | "All")[] = [
 
 // ── Main page ──────────────────────────────────────────────────────────────────
 export default function QuotesPage() {
-  const [quotes,        setQuotes]        = useState<Quote[]>(initialQuotes);
+  const [quotes,        setQuotes]        = useState<Quote[]>([]);
+  const [loadingQuotes, setLoadingQuotes] = useState(true);
   const [selectedQuote, setSelectedQuote] = useState<Quote | null>(null);
   const [drawerOpen,    setDrawerOpen]    = useState(false);
   const [builderOpen,   setBuilderOpen]   = useState(false);
@@ -49,6 +50,19 @@ export default function QuotesPage() {
   const [search,        setSearch]        = useState("");
   const [filterStatus,  setFilterStatus]  = useState<QuoteStatus | "All">("All");
   const [showFilters,   setShowFilters]   = useState(false);
+
+  // ── Load from Supabase on mount ──────────────────────────────────────────────
+  useEffect(() => {
+    void (async () => {
+      try {
+        const res  = await fetch("/api/quotes");
+        const data = await res.json() as { quotes?: Quote[] };
+        setQuotes(data.quotes ?? []);
+      } finally {
+        setLoadingQuotes(false);
+      }
+    })();
+  }, []);
 
   const hasActiveFilters = filterStatus !== "All" || search !== "";
 
@@ -78,31 +92,39 @@ export default function QuotesPage() {
     setBuilderOpen(true);
   }, []);
 
-  const saveQuote = useCallback((q: Quote) => {
+  const saveQuote = useCallback(async (q: Quote) => {
+    // Optimistic update
     setQuotes((prev) => {
       const idx = prev.findIndex((x) => x.id === q.id);
-      if (idx >= 0) {
-        const updated = [...prev];
-        updated[idx] = q;
-        return updated;
-      }
+      if (idx >= 0) { const u = [...prev]; u[idx] = q; return u; }
       return [q, ...prev];
     });
     setSelectedQuote((prev) => (prev?.id === q.id ? q : prev));
+    // Persist to Supabase
+    await fetch("/api/quotes", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify(q),
+    });
   }, []);
 
-  const deleteQuote = useCallback((id: string) => {
+  const deleteQuote = useCallback(async (id: string) => {
     setQuotes((prev) => prev.filter((q) => q.id !== id));
     if (selectedQuote?.id === id) setDrawerOpen(false);
+    await fetch(`/api/quotes/${id}`, { method: "DELETE" });
   }, [selectedQuote]);
 
-  const updateStatus = useCallback((id: string, status: QuoteStatus) => {
+  const updateStatus = useCallback(async (id: string, status: QuoteStatus) => {
+    const updated = new Date().toISOString().split("T")[0];
     setQuotes((prev) =>
-      prev.map((q) =>
-        q.id === id ? { ...q, status, updatedAt: new Date().toISOString().split("T")[0] } : q
-      )
+      prev.map((q) => q.id === id ? { ...q, status, updatedAt: updated } : q)
     );
     setSelectedQuote((prev) => (prev?.id === id ? { ...prev, status } : prev));
+    await fetch(`/api/quotes/${id}`, {
+      method:  "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ status, updatedAt: updated }),
+    });
   }, []);
 
   const clearFilters = () => {
@@ -164,7 +186,15 @@ export default function QuotesPage() {
       <main className="flex-1 px-6 md:px-8 py-8 space-y-6 max-w-[1600px] w-full mx-auto">
 
         {/* ── KPI Cards ────────────────────────────────────────────────── */}
-        <QuoteOverviewCards quotes={quotes} />
+        {loadingQuotes ? (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="h-20 bg-[#111114] border border-white/[0.05] rounded-2xl animate-pulse" />
+            ))}
+          </div>
+        ) : (
+          <QuoteOverviewCards quotes={quotes} />
+        )}
 
         {/* ── Search & Filters ─────────────────────────────────────────── */}
         <motion.div

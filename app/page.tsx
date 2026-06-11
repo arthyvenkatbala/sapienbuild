@@ -1,6 +1,5 @@
 import { supabase } from "@/lib/supabase";
-import { kpiData, sparklineData } from "@/lib/mock-data";
-import StatCard from "@/components/dashboard/StatCard";
+import DashboardKPIs from "@/components/dashboard/DashboardKPIs";
 import PlatformChart from "@/components/dashboard/PlatformChart";
 import TopAdsTable from "@/components/dashboard/TopAdsTable";
 import MediaGallery from "@/components/dashboard/MediaGallery";
@@ -24,8 +23,6 @@ export default async function Home() {
       status: l.status ?? "New Lead",
     })) ?? [];
 
-  const kpi = kpiData;
-
   return (
     <div className="flex flex-col min-h-screen">
       {/* Top bar */}
@@ -46,70 +43,8 @@ export default async function Home() {
 
       <main className="flex-1 px-6 md:px-8 py-8 space-y-8 max-w-[1400px] w-full mx-auto">
 
-        {/* ── KPI Cards ── */}
-        <section>
-          <p className="text-xs font-semibold uppercase tracking-widest text-zinc-600 mb-4">
-            Performance Overview
-          </p>
-          <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-7 gap-3">
-            <StatCard
-              label="Total Spend"
-              value={`₹${(kpi.totalSpend.value / 1000).toFixed(1)}k`}
-              change={kpi.totalSpend.change}
-              sparkline={sparklineData.spend}
-              color="purple"
-              delay={0}
-            />
-            <StatCard
-              label="Total Clicks"
-              value={kpi.totalClicks.value.toLocaleString()}
-              change={kpi.totalClicks.change}
-              sparkline={sparklineData.clicks}
-              color="blue"
-              delay={0.05}
-            />
-            <StatCard
-              label="CTR"
-              value={`${kpi.ctr.value}%`}
-              change={kpi.ctr.change}
-              sparkline={[3.1, 3.3, 3.5, 3.4, 3.6, 3.7, 3.82]}
-              color="green"
-              delay={0.1}
-            />
-            <StatCard
-              label="Cost Per Lead"
-              value={`₹${kpi.cpl.value}`}
-              change={kpi.cpl.change}
-              sparkline={sparklineData.cpl}
-              color="orange"
-              delay={0.15}
-            />
-            <StatCard
-              label="Leads"
-              value={String(kpi.leadsGenerated.value)}
-              change={kpi.leadsGenerated.change}
-              sparkline={sparklineData.leads}
-              color="purple"
-              delay={0.2}
-            />
-            <StatCard
-              label="Conv. Rate"
-              value={`${kpi.conversionRate.value}%`}
-              change={kpi.conversionRate.change}
-              sparkline={[3.2, 3.5, 3.8, 4.0, 4.2, 4.4, 4.6]}
-              color="green"
-              delay={0.25}
-            />
-            <StatCard
-              label="ROAS"
-              value={`${kpi.roas.value}×`}
-              change={kpi.roas.change}
-              sparkline={[2.8, 3.0, 3.2, 3.4, 3.5, 3.7, 3.8]}
-              color="blue"
-              delay={0.3}
-            />
-          </div>
-        </section>
+        {/* ── KPI Cards — real data per selected client ── */}
+        <DashboardKPIs />
 
         {/* ── Platform Chart ── */}
         <PlatformChart />

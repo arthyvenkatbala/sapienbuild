@@ -1,0 +1,126 @@
+"use client";
+
+import { useState, useEffect, useCallback } from "react";
+import { RefreshCw, AlertCircle } from "lucide-react";
+import StatCard from "@/components/dashboard/StatCard";
+import { useClientContext } from "@/lib/client-context";
+
+interface Totals {
+  spend: number; clicks: number; impressions: number;
+  leads: number; ctr:   number; cpl:         number; roas: number;
+}
+interface Sparklines {
+  spend: number[]; clicks: number[]; impressions: number[];
+  leads: number[]; cpl:   number[];
+}
+interface Metrics {
+  hasData: boolean; totals: Totals; sparklines: Sparklines; lastSyncedAt: string | null;
+}
+
+function fmt(n: number) {
+  return new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 }).format(n);
+}
+
+export default function AnalyticsMetrics() {
+  const { selectedClient } = useClientContext();
+  const [metrics, setMetrics] = useState<Metrics | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState("");
+
+  const fetchMetrics = useCallback(async () => {
+    if (!selectedClient) { setMetrics(null); return; }
+    setLoading(true);
+    try {
+      const res  = await fetch(`/api/clients/${selectedClient.id}/metrics`);
+      setMetrics(await res.json() as Metrics);
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedClient]);
+
+  useEffect(() => { void fetchMetrics(); }, [fetchMetrics]);
+
+  const handleSync = async () => {
+    if (!selectedClient || syncing) return;
+    setSyncing(true);
+    try {
+      const res  = await fetch(`/api/clients/${selectedClient.id}/sync`, { method: "POST" });
+      const data = await res.json() as { error?: string };
+      setSyncMsg(res.ok ? "Synced!" : (data.error ?? "Sync failed"));
+      if (res.ok) void fetchMetrics();
+    } catch { setSyncMsg("Network error"); }
+    finally {
+      setSyncing(false);
+      setTimeout(() => setSyncMsg(""), 4000);
+    }
+  };
+
+  const t  = metrics?.totals;
+  const sp = metrics?.sparklines;
+  const cpc = t && t.clicks > 0 ? t.spend / t.clicks : 0;
+  const convRate = t && t.clicks > 0 ? (t.leads / t.clicks) * 100 : 0;
+
+  return (
+    <section>
+      <div className="flex items-center justify-between mb-4">
+        <p className="text-xs font-semibold uppercase tracking-widest text-zinc-600">
+          Analytics Overview
+          {selectedClient && (
+            <span className="text-zinc-500 normal-case font-normal ml-2">· {selectedClient.business_name}</span>
+          )}
+        </p>
+        <div className="flex items-center gap-3">
+          {metrics?.lastSyncedAt && (
+            <span className="text-[10px] text-zinc-600">
+              Last sync: {new Date(metrics.lastSyncedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
+            </span>
+          )}
+          {selectedClient && (
+            <button onClick={handleSync} disabled={syncing}
+              className="flex items-center gap-1.5 text-[10px] text-zinc-400 hover:text-white border border-white/[0.07] hover:border-white/[0.15] px-3 py-1.5 rounded-lg transition-all disabled:opacity-50">
+              <RefreshCw size={10} className={syncing ? "animate-spin" : ""} />
+              {syncing ? "Syncing…" : syncMsg || "Sync Now"}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {!selectedClient && (
+        <div className="flex items-center gap-2.5 px-4 py-3.5 bg-[#111114] border border-white/[0.07] rounded-xl text-sm text-zinc-500">
+          <AlertCircle size={14} className="shrink-0 text-zinc-600" />
+          Select a client to view their analytics data.
+        </div>
+      )}
+
+      {selectedClient && loading && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-3">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div key={i} className="h-24 bg-[#111114] border border-white/[0.05] rounded-2xl animate-pulse" />
+          ))}
+        </div>
+      )}
+
+      {selectedClient && !loading && metrics && !metrics.hasData && (
+        <div className="flex flex-col items-center gap-3 py-10 bg-[#111114] border border-white/[0.07] rounded-xl text-center">
+          <AlertCircle size={20} className="text-zinc-600" />
+          <p className="text-sm text-zinc-500">No data for <span className="text-zinc-300">{selectedClient.business_name}</span>.</p>
+          <p className="text-xs text-zinc-600">Click <span className="text-zinc-400 font-semibold">Sync Now</span> above to pull from Meta &amp; Google.</p>
+        </div>
+      )}
+
+      {selectedClient && !loading && metrics?.hasData && t && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-3">
+          <StatCard label="Impressions"  value={t.impressions > 999 ? `${(t.impressions / 1000).toFixed(1)}k` : fmt(t.impressions)} change={0} sparkline={sp?.impressions ?? []} color="purple" delay={0}    />
+          <StatCard label="Clicks"       value={t.clicks > 999 ? `${(t.clicks / 1000).toFixed(1)}k` : fmt(t.clicks)} change={0} sparkline={sp?.clicks ?? []} color="blue" delay={0.04} />
+          <StatCard label="CTR"          value={`${t.ctr.toFixed(2)}%`}    change={0} sparkline={[]}              color="green"  delay={0.08} />
+          <StatCard label="CPC"          value={cpc > 0 ? `₹${fmt(cpc)}` : "—"} change={0} sparkline={[]}        color="orange" delay={0.12} />
+          <StatCard label="CPL"          value={t.cpl > 0 ? `₹${fmt(t.cpl)}` : "—"} change={0} sparkline={sp?.cpl ?? []} color="purple" delay={0.16} />
+          <StatCard label="ROAS"         value={t.roas > 0 ? `${t.roas.toFixed(1)}×` : "N/A"} change={0} sparkline={[]} color="blue" delay={0.20} />
+          <StatCard label="Conv. Rate"   value={`${convRate.toFixed(2)}%`}  change={0} sparkline={[]}              color="green"  delay={0.24} />
+          <StatCard label="Total Spend"  value={`₹${fmt(t.spend)}`}         change={0} sparkline={sp?.spend ?? []} color="orange" delay={0.28} />
+        </div>
+      )}
+    </section>
+  );
+}

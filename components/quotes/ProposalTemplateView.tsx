@@ -2,7 +2,7 @@
 
 import { useRef } from "react";
 import { Printer } from "lucide-react";
-import { Quote, DELIVERY_TIMELINE } from "@/lib/quotes-data";
+import { Quote, DELIVERY_TIMELINE, FIXED_TEMPLATE_SERVICES, STANDARD_PROPOSAL_ADDONS } from "@/lib/quotes-data";
 
 interface Props {
   quote:        Quote;
@@ -64,9 +64,6 @@ export default function ProposalTemplateView({ quote, showControls = true }: Pro
     document.body.innerHTML = original;
     window.location.reload();
   };
-
-  const servicesTotal = quote.services.reduce((s, l) => s + l.subtotal, 0);
-  const addOnsTotal   = quote.addOns.reduce((s, l) => s + l.subtotal, 0);
 
   return (
     <div className="relative">
@@ -247,7 +244,7 @@ export default function ProposalTemplateView({ quote, showControls = true }: Pro
 
           <GoldDivider />
 
-          {/* Services Table */}
+          {/* Services Included — fixed descriptions, variable event coverage */}
           <section style={{ marginBottom: 36 }}>
             <h3
               style={{
@@ -260,112 +257,76 @@ export default function ProposalTemplateView({ quote, showControls = true }: Pro
             >
               Services Included
             </h3>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead>
-                <tr style={{ background: DARK, color: CREAM }}>
-                  {["Service", "Sessions", "Events Covered", "Rate (₹)", "Amount (₹)"].map((h) => (
-                    <th
-                      key={h}
-                      style={{
-                        fontSize: 9,
-                        letterSpacing: "0.2em",
-                        textTransform: "uppercase",
-                        padding: "10px 12px",
-                        textAlign: h === "Rate (₹)" || h === "Amount (₹)" ? "right" : "left",
-                        fontWeight: 600,
-                        color: GOLD,
-                      }}
-                    >
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {quote.services.map((s, i) => (
-                  <tr
-                    key={s.id}
-                    style={{ background: i % 2 === 0 ? CREAM : LIGHT }}
+            <div style={{ border: `1px solid ${BORDER}55`, borderRadius: 4, overflow: "hidden" }}>
+              {FIXED_TEMPLATE_SERVICES.map((svc, i) => {
+                const coverage = quote.services[i]?.events ?? "";
+                return (
+                  <div
+                    key={svc.id}
+                    style={{
+                      display: "flex",
+                      alignItems: "flex-start",
+                      gap: 14,
+                      padding: "16px 20px",
+                      background: i % 2 === 0 ? CREAM : LIGHT,
+                      borderBottom: i < FIXED_TEMPLATE_SERVICES.length - 1 ? `1px solid ${BORDER}33` : "none",
+                    }}
                   >
-                    <td style={{ padding: "10px 12px", fontSize: 12, fontWeight: 500, color: DARK }}>{s.name}</td>
-                    <td style={{ padding: "10px 12px", fontSize: 12, color: "#5a4a30", textAlign: "center" }}>{s.sessions}</td>
-                    <td style={{ padding: "10px 12px", fontSize: 11, color: "#7a6a50" }}>{s.events}</td>
-                    <td style={{ padding: "10px 12px", fontSize: 12, color: "#5a4a30", textAlign: "right" }}>{rupee(s.unitPrice)}</td>
-                    <td style={{ padding: "10px 12px", fontSize: 12, fontWeight: 600, color: DARK, textAlign: "right" }}>{rupee(s.subtotal)}</td>
-                  </tr>
-                ))}
-                <tr style={{ background: DARK }}>
-                  <td colSpan={4} style={{ padding: "10px 12px", fontSize: 11, fontWeight: 600, color: GOLD, textAlign: "right", letterSpacing: "0.1em" }}>
-                    Services Subtotal
-                  </td>
-                  <td style={{ padding: "10px 12px", fontSize: 14, fontWeight: 700, color: GOLD, textAlign: "right" }}>
-                    ₹{rupee(servicesTotal)}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </section>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: GOLD, flexShrink: 0, paddingTop: 2, width: 20 }}>
+                      {i + 1}.
+                    </span>
+                    <div style={{ flex: 1 }}>
+                      <p style={{ fontSize: 13, fontWeight: 700, color: DARK, marginBottom: 4, lineHeight: 1.4 }}>
+                        {svc.name}
+                      </p>
+                      <p style={{ fontSize: 11, color: "#7a6a50", lineHeight: 1.65, fontStyle: "italic" }}>
+                        {svc.description}
+                      </p>
+                    </div>
+                    {coverage && (
+                      <div style={{ minWidth: 160, textAlign: "right", flexShrink: 0, paddingTop: 2 }}>
+                        <p style={{ fontSize: 11, fontWeight: 600, color: DARK, lineHeight: 1.65 }}>
+                          {coverage}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
 
-          {/* Add-ons Table — only if there are add-ons */}
-          {quote.addOns.length > 0 && (
-            <section style={{ marginBottom: 36 }}>
-              <h3
+            {/* Total Cost */}
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginTop: 20,
+                paddingTop: 20,
+                borderTop: `2px solid ${GOLD}`,
+              }}
+            >
+              <p
                 style={{
-                  fontSize: 11,
-                  letterSpacing: "0.3em",
+                  fontSize: 14,
+                  fontWeight: 700,
+                  letterSpacing: "0.1em",
                   textTransform: "uppercase",
-                  color: GOLD,
-                  marginBottom: 16,
+                  color: DARK,
                 }}
               >
-                Additional Services &amp; Add-ons
-              </h3>
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                <thead>
-                  <tr style={{ background: DARK, color: CREAM }}>
-                    {["Add-On", "Qty", "Unit Price (₹)", "Amount (₹)"].map((h) => (
-                      <th
-                        key={h}
-                        style={{
-                          fontSize: 9,
-                          letterSpacing: "0.2em",
-                          textTransform: "uppercase",
-                          padding: "10px 12px",
-                          textAlign: h.includes("₹") ? "right" : "left",
-                          fontWeight: 600,
-                          color: GOLD,
-                        }}
-                      >
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {quote.addOns.map((a, i) => (
-                    <tr key={a.id} style={{ background: i % 2 === 0 ? CREAM : LIGHT }}>
-                      <td style={{ padding: "10px 12px", fontSize: 12, fontWeight: 500, color: DARK }}>{a.name}</td>
-                      <td style={{ padding: "10px 12px", fontSize: 12, color: "#5a4a30", textAlign: "center" }}>{a.qty}</td>
-                      <td style={{ padding: "10px 12px", fontSize: 12, color: "#5a4a30", textAlign: "right" }}>{rupee(a.price)}</td>
-                      <td style={{ padding: "10px 12px", fontSize: 12, fontWeight: 600, color: DARK, textAlign: "right" }}>{rupee(a.subtotal)}</td>
-                    </tr>
-                  ))}
-                  <tr style={{ background: DARK }}>
-                    <td colSpan={3} style={{ padding: "10px 12px", fontSize: 11, fontWeight: 600, color: GOLD, textAlign: "right", letterSpacing: "0.1em" }}>
-                      Add-Ons Subtotal
-                    </td>
-                    <td style={{ padding: "10px 12px", fontSize: 14, fontWeight: 700, color: GOLD, textAlign: "right" }}>
-                      ₹{rupee(addOnsTotal)}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </section>
-          )}
+                Total Cost
+              </p>
+              <p style={{ fontSize: 22, fontWeight: 700, color: GOLD }}>
+                INR {rupee(quote.grandTotal)}
+              </p>
+            </div>
+            <p style={{ fontSize: 10, color: "#8a7a60", marginTop: 6 }}>
+              * 50% advance to confirm booking · Remaining 50% before event commencement
+            </p>
+          </section>
 
-          <GoldDivider />
-
-          {/* Pricing Summary */}
+          {/* Optional Add-Ons — fixed reference table */}
           <section style={{ marginBottom: 36 }}>
             <h3
               style={{
@@ -376,82 +337,40 @@ export default function ProposalTemplateView({ quote, showControls = true }: Pro
                 marginBottom: 16,
               }}
             >
-              Pricing Summary
+              Optional Add-Ons
             </h3>
-            <div
-              style={{
-                background: LIGHT,
-                border: `1px solid ${BORDER}55`,
-                borderRadius: 4,
-                padding: "20px 24px",
-              }}
-            >
-              {[
-                ["Services Total",  servicesTotal, false],
-                ["Add-ons Total",   addOnsTotal,   false],
-                ["Subtotal",        quote.subtotal, false],
-              ].filter(([, v]) => Number(v) > 0).map(([label, value]) => (
-                <div
-                  key={String(label)}
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    padding: "6px 0",
-                    borderBottom: `1px solid ${BORDER}30`,
-                  }}
-                >
-                  <p style={{ fontSize: 12, color: "#5a4a30" }}>{label}</p>
-                  <p style={{ fontSize: 13, fontWeight: 500, color: DARK }}>₹{rupee(Number(value))}</p>
-                </div>
-              ))}
-
-              {quote.discountAmount > 0 && (
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    padding: "6px 0",
-                    borderBottom: `1px solid ${BORDER}30`,
-                  }}
-                >
-                  <p style={{ fontSize: 12, color: "#5a7a50" }}>
-                    Discount {quote.discountType === "percent" ? `(${quote.discountValue}%)` : "(Special offer)"}
-                  </p>
-                  <p style={{ fontSize: 13, fontWeight: 500, color: "#4a7a50" }}>−₹{rupee(quote.discountAmount)}</p>
-                </div>
-              )}
-
-              {/* Grand Total */}
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  marginTop: 16,
-                  paddingTop: 16,
-                  borderTop: `2px solid ${GOLD}`,
-                }}
-              >
-                <p
-                  style={{
-                    fontSize: 13,
-                    fontWeight: 700,
-                    letterSpacing: "0.15em",
-                    textTransform: "uppercase",
-                    color: DARK,
-                  }}
-                >
-                  Grand Total (Incl. GST)
-                </p>
-                <p style={{ fontSize: 24, fontWeight: 700, color: GOLD }}>₹{rupee(quote.grandTotal)}</p>
-              </div>
-
-              <p style={{ fontSize: 10, color: "#8a7a60", marginTop: 8 }}>
-                * 50% advance to confirm booking · Remaining 50% before event commencement
-              </p>
-            </div>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr style={{ background: DARK }}>
+                  {["Details", "Price"].map((h) => (
+                    <th
+                      key={h}
+                      style={{
+                        fontSize: 9,
+                        letterSpacing: "0.2em",
+                        textTransform: "uppercase",
+                        padding: "10px 16px",
+                        textAlign: h === "Price" ? "right" : "left",
+                        fontWeight: 600,
+                        color: GOLD,
+                      }}
+                    >
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {STANDARD_PROPOSAL_ADDONS.map((a, i) => (
+                  <tr key={a.name} style={{ background: i % 2 === 0 ? CREAM : LIGHT }}>
+                    <td style={{ padding: "10px 16px", fontSize: 12, color: DARK }}>{a.name}</td>
+                    <td style={{ padding: "10px 16px", fontSize: 12, fontWeight: 600, color: "#7a5a30", textAlign: "right" }}>
+                      {a.price}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </section>
 
           <GoldDivider />

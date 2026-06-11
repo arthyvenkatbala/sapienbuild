@@ -3,14 +3,14 @@
 import { useState, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  X, ChevronRight, ChevronLeft, Plus, Trash2,
+  X, ChevronRight, ChevronLeft,
   Sparkles, MessageCircle, Mail, Check,
-  User, Calendar, Building2, MapPin,
+  User, Calendar, Building2,
 } from "lucide-react";
 import {
-  Quote, QuoteStatus, ServiceLine, AddOnLine,
-  SERVICE_CATALOG, ADDON_CATALOG, EVENT_TYPES, EventType,
-  AI_PRICING_SUGGESTIONS, AiPricingSuggestion,
+  Quote, QuoteStatus, ServiceLine,
+  EVENT_TYPES, EventType,
+  FIXED_TEMPLATE_SERVICES,
 } from "@/lib/quotes-data";
 import ProposalTemplateView from "./ProposalTemplateView";
 
@@ -218,379 +218,81 @@ function StepDetails({
 // ── Step 2: Service Builder ────────────────────────────────────────────────────
 
 interface BuilderState {
-  services:      ServiceLine[];
-  addOns:        AddOnLine[];
-  discountType:  "flat" | "percent";
-  discountValue: number;
+  serviceEvents: string[];
+  totalCost:     number;
 }
+
+const EVENT_COVERAGE_PLACEHOLDERS = [
+  "e.g. Events - 1,2",
+  "e.g. Events - 1,2",
+  "e.g. Photo for events - 1,2 / Video for events - 1,2",
+  "",
+];
 
 function StepBuilder({
   state,
   onChange,
 }: { state: BuilderState; onChange: (s: BuilderState) => void }) {
-  const addService = () => {
-    const first = SERVICE_CATALOG[0];
-    const line: ServiceLine = {
-      id:        genId(),
-      serviceId: first.id,
-      name:      first.name,
-      sessions:  1,
-      events:    "",
-      unitPrice: first.basePrice,
-      subtotal:  first.basePrice,
-    };
-    onChange({ ...state, services: [...state.services, line] });
+  const setEvent = (i: number, val: string) => {
+    const updated = [...state.serviceEvents];
+    updated[i] = val;
+    onChange({ ...state, serviceEvents: updated });
   };
-
-  const updateService = (id: string, patch: Partial<ServiceLine>) => {
-    onChange({
-      ...state,
-      services: state.services.map((s) => {
-        if (s.id !== id) return s;
-        const updated = { ...s, ...patch };
-        // If serviceId changed, update name and unitPrice from catalog
-        if (patch.serviceId) {
-          const def = SERVICE_CATALOG.find((c) => c.id === patch.serviceId);
-          if (def) { updated.name = def.name; updated.unitPrice = def.basePrice; }
-        }
-        updated.subtotal = updated.sessions * updated.unitPrice;
-        return updated;
-      }),
-    });
-  };
-
-  const removeService = (id: string) => {
-    onChange({ ...state, services: state.services.filter((s) => s.id !== id) });
-  };
-
-  const addAddOn = () => {
-    const first = ADDON_CATALOG[0];
-    const line: AddOnLine = {
-      id:      genId(),
-      addOnId: first.id,
-      name:    first.name,
-      qty:     1,
-      price:   first.price,
-      subtotal: first.price,
-    };
-    onChange({ ...state, addOns: [...state.addOns, line] });
-  };
-
-  const updateAddOn = (id: string, patch: Partial<AddOnLine>) => {
-    onChange({
-      ...state,
-      addOns: state.addOns.map((a) => {
-        if (a.id !== id) return a;
-        const updated = { ...a, ...patch };
-        if (patch.addOnId) {
-          const def = ADDON_CATALOG.find((c) => c.id === patch.addOnId);
-          if (def) { updated.name = def.name; updated.price = def.price; }
-        }
-        updated.subtotal = updated.qty * updated.price;
-        return updated;
-      }),
-    });
-  };
-
-  const removeAddOn = (id: string) => {
-    onChange({ ...state, addOns: state.addOns.filter((a) => a.id !== id) });
-  };
-
-  const selectCls = `${inputCls} cursor-pointer`;
-
-  const servicesTotal = state.services.reduce((s, l) => s + l.subtotal, 0);
-  const addOnsTotal   = state.addOns.reduce((s, l) => s + l.subtotal, 0);
-  const subtotal      = servicesTotal + addOnsTotal;
-  const discountAmt   =
-    state.discountType === "percent"
-      ? Math.round(subtotal * (state.discountValue / 100))
-      : state.discountValue;
-  const grandTotal = Math.max(0, subtotal - discountAmt);
 
   return (
     <div className="space-y-6">
-
-      {/* Services Table */}
       <div>
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-xs font-semibold text-zinc-300 uppercase tracking-widest">Services</h3>
-          <button
-            type="button"
-            onClick={addService}
-            className="flex items-center gap-1.5 text-xs text-purple-400 hover:text-purple-300 border border-purple-500/30 hover:border-purple-500/60 px-3 py-1.5 rounded-lg transition-all"
-          >
-            <Plus size={11} /> Add Service
-          </button>
-        </div>
-
-        {state.services.length === 0 ? (
-          <div className="border border-dashed border-white/[0.08] rounded-xl p-8 flex flex-col items-center justify-center text-zinc-600">
-            <Plus size={20} className="mb-2 opacity-40" />
-            <p className="text-sm">No services added yet</p>
-            <button
-              type="button"
-              onClick={addService}
-              className="mt-3 text-xs text-purple-400 hover:text-purple-300 transition-colors"
+        <p className="text-xs text-zinc-500 mb-4">
+          Enter the event coverage for each service. Events are numbered as listed under Event Details in Step 1.
+        </p>
+        <div className="space-y-3">
+          {FIXED_TEMPLATE_SERVICES.map((svc, i) => (
+            <div
+              key={svc.id}
+              className="bg-[#0d0d10] border border-white/[0.07] rounded-xl p-4"
             >
-              Add your first service
-            </button>
-          </div>
-        ) : (
-          <div className="bg-[#0d0d10] border border-white/[0.07] rounded-xl overflow-hidden">
-            <div className="grid grid-cols-[2fr_80px_1fr_100px_100px_36px] gap-0 border-b border-white/[0.06]">
-              {["Service", "Sessions", "Events Covered", "Rate (₹)", "Amount (₹)", ""].map((h) => (
-                <div key={h} className="px-3 py-2 text-[9px] font-semibold uppercase tracking-widest text-zinc-600">
-                  {h}
-                </div>
-              ))}
-            </div>
-            {state.services.map((s) => (
-              <div
-                key={s.id}
-                className="grid grid-cols-[2fr_80px_1fr_100px_100px_36px] gap-0 border-b border-white/[0.04] items-center hover:bg-white/[0.02]"
-              >
-                <div className="px-2 py-1.5">
-                  <select
-                    value={s.serviceId}
-                    onChange={(e) => updateService(s.id, { serviceId: e.target.value })}
-                    className="w-full bg-transparent text-xs text-zinc-200 outline-none cursor-pointer"
-                  >
-                    {SERVICE_CATALOG.map((c) => (
-                      <option key={c.id} value={c.id} className="bg-[#111114]">{c.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="px-2 py-1.5">
-                  <input
-                    type="number"
-                    min={1}
-                    value={s.sessions}
-                    onChange={(e) => updateService(s.id, { sessions: Number(e.target.value) })}
-                    className="w-full bg-[#111116] border border-white/[0.07] rounded-md px-2 py-1 text-xs text-zinc-200 outline-none focus:border-white/[0.18] text-center"
-                  />
-                </div>
-                <div className="px-2 py-1.5">
-                  <input
-                    type="text"
-                    value={s.events}
-                    placeholder="Wedding, Reception…"
-                    onChange={(e) => updateService(s.id, { events: e.target.value })}
-                    className="w-full bg-[#111116] border border-white/[0.07] rounded-md px-2 py-1 text-xs text-zinc-200 outline-none focus:border-white/[0.18] placeholder:text-zinc-700"
-                  />
-                </div>
-                <div className="px-2 py-1.5">
-                  <input
-                    type="number"
-                    min={0}
-                    value={s.unitPrice}
-                    onChange={(e) => updateService(s.id, { unitPrice: Number(e.target.value) })}
-                    className="w-full bg-[#111116] border border-white/[0.07] rounded-md px-2 py-1 text-xs text-zinc-200 outline-none focus:border-white/[0.18] text-right"
-                  />
-                </div>
-                <div className="px-3 py-1.5 text-xs font-semibold text-white text-right">
-                  ₹{rupee(s.subtotal)}
-                </div>
-                <div className="px-1 py-1.5 flex justify-center">
-                  <button
-                    type="button"
-                    onClick={() => removeService(s.id)}
-                    className="p-1 rounded hover:bg-red-500/10 text-zinc-700 hover:text-red-400 transition-all"
-                  >
-                    <Trash2 size={11} />
-                  </button>
+              <div className="flex items-start gap-3">
+                <span className="text-xs font-bold text-amber-400 shrink-0 mt-0.5 w-5">{i + 1}.</span>
+                <div className="flex-1 space-y-2">
+                  <p className="text-sm font-semibold text-zinc-200">{svc.name}</p>
+                  <p className="text-xs text-zinc-600 italic leading-relaxed">{svc.description}</p>
+                  {i < 3 && (
+                    <input
+                      type="text"
+                      value={state.serviceEvents[i] ?? ""}
+                      onChange={(e) => setEvent(i, e.target.value)}
+                      placeholder={EVENT_COVERAGE_PLACEHOLDERS[i]}
+                      className={`${inputCls} w-full`}
+                    />
+                  )}
                 </div>
               </div>
-            ))}
-            {/* Services Subtotal row */}
-            <div className="grid grid-cols-[2fr_80px_1fr_100px_100px_36px] gap-0 bg-white/[0.03]">
-              <div className="px-3 py-2 col-span-4 text-[10px] font-semibold text-zinc-500 text-right uppercase tracking-widest">
-                Services Total
-              </div>
-              <div className="px-3 py-2 text-sm font-bold text-white text-right">₹{rupee(servicesTotal)}</div>
-              <div />
             </div>
-          </div>
-        )}
-      </div>
-
-      {/* Add-Ons Table */}
-      <div>
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-xs font-semibold text-zinc-300 uppercase tracking-widest">Add-Ons</h3>
-          <button
-            type="button"
-            onClick={addAddOn}
-            className="flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 border border-blue-500/30 hover:border-blue-500/60 px-3 py-1.5 rounded-lg transition-all"
-          >
-            <Plus size={11} /> Add Extra
-          </button>
-        </div>
-
-        {state.addOns.length > 0 && (
-          <div className="bg-[#0d0d10] border border-white/[0.07] rounded-xl overflow-hidden">
-            <div className="grid grid-cols-[2fr_80px_100px_100px_36px] gap-0 border-b border-white/[0.06]">
-              {["Add-On", "Qty", "Unit Price", "Amount", ""].map((h) => (
-                <div key={h} className="px-3 py-2 text-[9px] font-semibold uppercase tracking-widest text-zinc-600">{h}</div>
-              ))}
-            </div>
-            {state.addOns.map((a) => (
-              <div
-                key={a.id}
-                className="grid grid-cols-[2fr_80px_100px_100px_36px] gap-0 border-b border-white/[0.04] items-center hover:bg-white/[0.02]"
-              >
-                <div className="px-2 py-1.5">
-                  <select
-                    value={a.addOnId}
-                    onChange={(e) => updateAddOn(a.id, { addOnId: e.target.value })}
-                    className="w-full bg-transparent text-xs text-zinc-200 outline-none cursor-pointer"
-                  >
-                    {ADDON_CATALOG.map((c) => (
-                      <option key={c.id} value={c.id} className="bg-[#111114]">{c.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="px-2 py-1.5">
-                  <input
-                    type="number"
-                    min={1}
-                    value={a.qty}
-                    onChange={(e) => updateAddOn(a.id, { qty: Number(e.target.value) })}
-                    className="w-full bg-[#111116] border border-white/[0.07] rounded-md px-2 py-1 text-xs text-zinc-200 outline-none focus:border-white/[0.18] text-center"
-                  />
-                </div>
-                <div className="px-2 py-1.5">
-                  <input
-                    type="number"
-                    min={0}
-                    value={a.price}
-                    onChange={(e) => updateAddOn(a.id, { price: Number(e.target.value) })}
-                    className="w-full bg-[#111116] border border-white/[0.07] rounded-md px-2 py-1 text-xs text-zinc-200 outline-none focus:border-white/[0.18] text-right"
-                  />
-                </div>
-                <div className="px-3 py-1.5 text-xs font-semibold text-white text-right">₹{rupee(a.subtotal)}</div>
-                <div className="px-1 py-1.5 flex justify-center">
-                  <button
-                    type="button"
-                    onClick={() => removeAddOn(a.id)}
-                    className="p-1 rounded hover:bg-red-500/10 text-zinc-700 hover:text-red-400 transition-all"
-                  >
-                    <Trash2 size={11} />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Discount + Grand Total */}
-      <div className="grid grid-cols-2 gap-6">
-        {/* Discount */}
-        <div className="bg-[#0d0d10] border border-white/[0.07] rounded-xl p-4">
-          <h3 className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500 mb-3">Discount</h3>
-          <div className="flex gap-2 mb-3">
-            <button
-              type="button"
-              onClick={() => onChange({ ...state, discountType: "flat" })}
-              className={`flex-1 text-xs py-2 rounded-lg border transition-all ${
-                state.discountType === "flat"
-                  ? "bg-amber-500/15 border-amber-500/40 text-amber-300"
-                  : "border-white/[0.07] text-zinc-500 hover:text-zinc-300"
-              }`}
-            >
-              Flat ₹
-            </button>
-            <button
-              type="button"
-              onClick={() => onChange({ ...state, discountType: "percent" })}
-              className={`flex-1 text-xs py-2 rounded-lg border transition-all ${
-                state.discountType === "percent"
-                  ? "bg-amber-500/15 border-amber-500/40 text-amber-300"
-                  : "border-white/[0.07] text-zinc-500 hover:text-zinc-300"
-              }`}
-            >
-              Percent %
-            </button>
-          </div>
-          <input
-            type="number"
-            min={0}
-            value={state.discountValue}
-            onChange={(e) => onChange({ ...state, discountValue: Number(e.target.value) })}
-            placeholder={state.discountType === "flat" ? "Enter ₹ amount" : "Enter %"}
-            className={`${inputCls} w-full`}
-          />
-          {discountAmt > 0 && (
-            <p className="text-xs text-green-400 mt-2">Saving ₹{rupee(discountAmt)}</p>
-          )}
-        </div>
-
-        {/* Grand Total */}
-        <div className="bg-[#0d0d10] border border-white/[0.07] rounded-xl p-4 flex flex-col justify-between">
-          <h3 className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500 mb-3">Summary</h3>
-          <div className="space-y-1.5 text-xs">
-            {addOnsTotal > 0 && (
-              <>
-                <div className="flex justify-between text-zinc-500">
-                  <span>Services</span><span>₹{rupee(servicesTotal)}</span>
-                </div>
-                <div className="flex justify-between text-zinc-500">
-                  <span>Add-Ons</span><span>₹{rupee(addOnsTotal)}</span>
-                </div>
-              </>
-            )}
-            <div className="flex justify-between text-zinc-400">
-              <span>Subtotal</span><span>₹{rupee(subtotal)}</span>
-            </div>
-            {discountAmt > 0 && (
-              <div className="flex justify-between text-green-400">
-                <span>Discount</span><span>−₹{rupee(discountAmt)}</span>
-              </div>
-            )}
-          </div>
-          <div className="mt-3 pt-3 border-t border-white/[0.08] flex justify-between items-center">
-            <span className="text-sm font-semibold text-zinc-300">Grand Total</span>
-            <span className="text-2xl font-bold text-white">₹{rupee(grandTotal)}</span>
-          </div>
-        </div>
-      </div>
-
-      {/* AI Pricing Suggestions */}
-      <div>
-        <div className="flex items-center gap-2 mb-3">
-          <Sparkles size={13} className="text-yellow-400" />
-          <h3 className="text-xs font-semibold text-yellow-400 uppercase tracking-widest">AI Pricing Recommendations</h3>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          {AI_PRICING_SUGGESTIONS.slice(0, 2).map((s) => (
-            <AISuggestionCard key={s.id} suggestion={s} />
           ))}
         </div>
       </div>
-    </div>
-  );
-}
 
-function AISuggestionCard({ suggestion: s }: { suggestion: AiPricingSuggestion }) {
-  const colors = {
-    bundle:  { bg: "bg-purple-500/08", border: "border-purple-500/20", text: "text-purple-400" },
-    upsell:  { bg: "bg-blue-500/08",   border: "border-blue-500/20",   text: "text-blue-400"   },
-    discount:{ bg: "bg-green-500/08",  border: "border-green-500/20",  text: "text-green-400"  },
-    timing:  { bg: "bg-amber-500/08",  border: "border-amber-500/20",  text: "text-amber-400"  },
-  } as const;
-  const c = colors[s.type];
-  return (
-    <div className={`border rounded-xl p-3 ${c.bg} ${c.border}`}>
-      <div className="flex items-start justify-between gap-2 mb-2">
-        <p className={`text-xs font-semibold ${c.text}`}>{s.title}</p>
-        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md ${c.bg} ${c.text} border ${c.border} whitespace-nowrap`}>
-          {s.impact}
-        </span>
+      {/* Total Cost */}
+      <div className="bg-[#0d0d10] border border-white/[0.07] rounded-xl p-5">
+        <Field label="Total Cost (INR) *">
+          <div className="relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm font-semibold select-none">₹</span>
+            <input
+              type="number"
+              min={0}
+              value={state.totalCost || ""}
+              onChange={(e) => onChange({ ...state, totalCost: Number(e.target.value) })}
+              placeholder="e.g. 150000"
+              className={`${inputCls} w-full pl-7`}
+            />
+          </div>
+          {state.totalCost > 0 && (
+            <p className="text-xs text-amber-400 mt-2">
+              INR {new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 }).format(state.totalCost)}
+            </p>
+          )}
+        </Field>
       </div>
-      <p className="text-[11px] text-zinc-400 leading-relaxed mb-2">{s.body}</p>
-      <button className={`text-[10px] font-semibold ${c.text} hover:brightness-125 transition-all`}>
-        {s.action} →
-      </button>
     </div>
   );
 }
@@ -712,33 +414,33 @@ export default function QuoteBuilderModal({ isOpen, onClose, onSaveQuote, editin
   });
 
   const [builder, setBuilder] = useState<BuilderState>({
-    services:      editingQuote?.services      ?? [],
-    addOns:        editingQuote?.addOns        ?? [],
-    discountType:  editingQuote?.discountType  ?? "flat",
-    discountValue: editingQuote?.discountValue ?? 0,
+    serviceEvents: FIXED_TEMPLATE_SERVICES.map((_, i) => editingQuote?.services[i]?.events ?? ""),
+    totalCost:     editingQuote?.grandTotal ?? 0,
   });
 
   const builtQuote = useMemo<Quote>(() => {
-    const servicesTotal = builder.services.reduce((s, l) => s + l.subtotal, 0);
-    const addOnsTotal   = builder.addOns.reduce((s, l) => s + l.subtotal, 0);
-    const subtotal      = servicesTotal + addOnsTotal;
-    const discountAmt   =
-      builder.discountType === "percent"
-        ? Math.round(subtotal * (builder.discountValue / 100))
-        : builder.discountValue;
-    const grandTotal = Math.max(0, subtotal - discountAmt);
-
     const today = new Date();
     const valid = new Date(today); valid.setDate(today.getDate() + 30);
     const fmt = (d: Date) => d.toISOString().split("T")[0];
 
     return {
-      id:              editingQuote?.id       ?? `q-${genId()}`,
+      id:              editingQuote?.id ?? `q-${genId()}`,
       ...details,
-      ...builder,
-      subtotal,
-      discountAmount:  discountAmt,
-      grandTotal,
+      services: FIXED_TEMPLATE_SERVICES.map((s, i): ServiceLine => ({
+        id:        `sl-${i}`,
+        serviceId: s.id,
+        name:      s.name,
+        sessions:  1,
+        events:    builder.serviceEvents[i] ?? "",
+        unitPrice: 0,
+        subtotal:  0,
+      })),
+      addOns:          [],
+      discountType:    "flat" as const,
+      discountValue:   0,
+      subtotal:        builder.totalCost,
+      discountAmount:  0,
+      grandTotal:      builder.totalCost,
       status:          "Draft" as QuoteStatus,
       createdAt:       editingQuote?.createdAt ?? fmt(today),
       updatedAt:       fmt(today),
@@ -761,7 +463,7 @@ export default function QuoteBuilderModal({ isOpen, onClose, onSaveQuote, editin
 
   const canProceed = () => {
     if (step === 0) return details.clientName.trim() !== "" && details.clientPhone.trim() !== "" && details.eventTypes.length > 0;
-    if (step === 1) return builder.services.length > 0;
+    if (step === 1) return builder.totalCost > 0;
     return true;
   };
 

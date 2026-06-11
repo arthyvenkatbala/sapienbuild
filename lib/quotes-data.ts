@@ -473,6 +473,53 @@ export const initialQuotes: Quote[] = [
   },
 ];
 
+// ── Fixed Template Services ───────────────────────────────────────────────────
+
+export interface FixedTemplateService {
+  id:          string;
+  name:        string;
+  description: string;
+}
+
+export const FIXED_TEMPLATE_SERVICES: FixedTemplateService[] = [
+  {
+    id:          "candid-doc",
+    name:        "Candid/documentary and portrait photography.",
+    description: "Unscripted, honest photo documentation of the events and portraits.",
+  },
+  {
+    id:          "cinematography",
+    name:        "Cinematography for candid/documentary film. (Drone for Reception)",
+    description: "A beautiful story weaved with authentic moments from the events. (5–7 mins)",
+  },
+  {
+    id:          "traditional",
+    name:        "Traditional photographer and traditional videographer.",
+    description: "Straight-forward pictures of people posing for the camera and group shots. A long video of everything that happens and everyone that’s there, edited to music of your choice.",
+  },
+  {
+    id:          "albums",
+    name:        "Two photo albums.",
+    description: "12″ × 15″ Layflat album of 80 pages with approx 150–200 images in each album.",
+  },
+];
+
+// ── Standard Proposal Add-Ons ─────────────────────────────────────────────────
+
+export interface StandardAddon {
+  name:  string;
+  price: string;
+}
+
+export const STANDARD_PROPOSAL_ADDONS: StandardAddon[] = [
+  { name: "Couple shoot (photo)",         price: "Rs. 20,000" },
+  { name: "Couple shoot (photo & video)", price: "Rs. 50,000" },
+  { name: "HD live streaming",            price: "Rs. 10,000" },
+  { name: "LED screen (8 ft × 12 ft)",    price: "Rs. 20,000" },
+  { name: "Additional album (40 sheets)", price: "Rs. 20,000" },
+  { name: "Fine art print & frame",       price: "starts from Rs. 1,500" },
+];
+
 // ── KPI helpers ───────────────────────────────────────────────────────────────
 
 export function computeQuoteKPIs(quotes: Quote[]) {
