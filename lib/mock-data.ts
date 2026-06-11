@@ -1162,6 +1162,58 @@ export const budgetAllocationData = {
   ] as { name: string; value: number; pct: number; color: string; roas?: number }[],
 };
 
+// ── Performance Reports Mock Data ──
+
+export const reportSpendTrendData = [
+  { month: "Jan", spend: 32000, budget: 35000 },
+  { month: "Feb", spend: 36400, budget: 38000 },
+  { month: "Mar", spend: 41200, budget: 42000 },
+  { month: "Apr", spend: 38800, budget: 40000 },
+  { month: "May", spend: 44600, budget: 46000 },
+  { month: "Jun", spend: 48200, budget: 50000 },
+];
+
+export const reportLeadGrowthData = [
+  { month: "Jan", leads: 68,  target: 75  },
+  { month: "Feb", leads: 82,  target: 80  },
+  { month: "Mar", leads: 97,  target: 90  },
+  { month: "Apr", leads: 89,  target: 95  },
+  { month: "May", leads: 110, target: 100 },
+  { month: "Jun", leads: 124, target: 110 },
+];
+
+export const reportPlatformData = [
+  { platform: "Instagram", spend: 21200, leads: 58, cpl: 365, roas: 4.8 },
+  { platform: "Facebook",  spend: 12800, leads: 32, cpl: 400, roas: 3.6 },
+  { platform: "Google",    spend: 9800,  leads: 24, cpl: 408, roas: 3.2 },
+  { platform: "YouTube",   spend: 4400,  leads: 10, cpl: 440, roas: 2.6 },
+];
+
+export const reportCampaignData = [
+  { name: "Wedding Season 2026", platform: "Instagram", spend: 18400, leads: 52, cpl: 354, roas: 5.2, status: "active" },
+  { name: "Summer Portraits",    platform: "Facebook",  spend: 9200,  leads: 28, cpl: 329, roas: 4.1, status: "active" },
+  { name: "Pre-Wedding Package", platform: "Google",    spend: 7600,  leads: 22, cpl: 345, roas: 3.8, status: "active" },
+  { name: "Maternity Series",    platform: "Instagram", spend: 6400,  leads: 16, cpl: 400, roas: 3.2, status: "paused" },
+  { name: "Corporate Events",    platform: "LinkedIn",  spend: 4200,  leads: 8,  cpl: 525, roas: 2.4, status: "active" },
+  { name: "Destination Wedding", platform: "YouTube",   spend: 2600,  leads: 6,  cpl: 433, roas: 2.8, status: "ended"  },
+];
+
+export const reportCreativeData = [
+  { name: "Wedding Gold — Reel",      type: "Video",    platform: "Instagram", impressions: 148000, ctr: 5.4, leads: 38, cpl: 326, score: 94 },
+  { name: "Couple Story — Video",     type: "Video",    platform: "Facebook",  impressions: 92000,  ctr: 4.2, leads: 24, cpl: 370, score: 82 },
+  { name: "Portrait Series — Carousel", type: "Carousel", platform: "Instagram", impressions: 76000, ctr: 3.8, leads: 18, cpl: 344, score: 78 },
+  { name: "Destination Wedding",      type: "Static",   platform: "Google",    impressions: 124000, ctr: 3.1, leads: 22, cpl: 445, score: 71 },
+  { name: "Pre-Wedding BTS — Reel",   type: "Video",    platform: "YouTube",   impressions: 68000,  ctr: 2.9, leads: 12, cpl: 450, score: 65 },
+  { name: "Studio Portrait — Static", type: "Static",   platform: "Instagram", impressions: 54000,  ctr: 2.6, leads: 9,  cpl: 489, score: 58 },
+];
+
+export const reportAISummaries = {
+  executive: "Instagram Reels generated 42% lower CPL compared to static creatives this month. Campaign spend efficiency improved by 12.4% month-over-month, with Wedding Season 2026 delivering ₹5.20 ROAS — the highest across all active campaigns. Lead volume grew 18.3% to 124 qualified leads, with strongest momentum in the final two weeks of June.",
+  platform:  "Instagram dominates with 52% spend share and 4.8× ROAS, significantly outperforming the portfolio average of 3.8×. Facebook maintains steady efficiency at 3.6× ROAS with 32 leads. Google underperforms in volume but shows strong search-intent quality. Recommend increasing Instagram budget by 20% and testing Google Performance Max for scale.",
+  creative:  "Video formats outperform static creatives by 42% on CPL and 38% on CTR. Reels (short-form vertical video) lead all formats at 5.4% CTR and ₹326 CPL. Carousel creatives deliver 18% better engagement than static images. Recommend increasing Reel production cadence to 3–4 per week to capitalise on the format's efficiency advantage.",
+  campaign:  "Wedding Season 2026 is the top-performing campaign at ₹5.20 ROAS with 52 leads this month. Summer Portraits shows the best CPL at ₹329. Corporate Events underperforms at 2.4× ROAS and should be reviewed for targeting refinement or budget reallocation toward higher-performing wedding verticals.",
+};
+
 export const predictiveInsightsData = [
   {
     title: "ROAS Forecast", current: 3.8,  projected: 4.5,  unit: "×", prefix: "",  confidence: 84, horizon: "30 days", trend: "up",   color: "#a855f7",
