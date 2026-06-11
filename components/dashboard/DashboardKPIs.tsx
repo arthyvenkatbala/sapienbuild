@@ -16,10 +16,11 @@ interface Sparklines {
 }
 
 interface Metrics {
-  hasData:      boolean;
-  totals:       Totals;
-  sparklines:   Sparklines;
-  lastSyncedAt: string | null;
+  hasData:        boolean;
+  syncedButEmpty: boolean;
+  totals:         Totals;
+  sparklines:     Sparklines;
+  lastSyncedAt:   string | null;
 }
 
 function fmt(n: number) {
@@ -116,8 +117,8 @@ export default function DashboardKPIs() {
         </div>
       )}
 
-      {/* No data yet — prompt to sync */}
-      {selectedClient && !loading && metrics && !metrics.hasData && (
+      {/* Never synced — prompt to sync */}
+      {selectedClient && !loading && metrics && !metrics.hasData && !metrics.syncedButEmpty && (
         <div className="flex flex-col items-center gap-3 py-10 bg-[#111114] border border-white/[0.07] rounded-xl text-center">
           <AlertCircle size={20} className="text-zinc-600" />
           <p className="text-sm text-zinc-500">
@@ -126,6 +127,23 @@ export default function DashboardKPIs() {
           <p className="text-xs text-zinc-600">
             Click <span className="text-zinc-400 font-semibold">Sync Now</span> above to pull the latest data from Meta &amp; Google.
           </p>
+        </div>
+      )}
+
+      {/* Synced but no spend in this period */}
+      {selectedClient && !loading && metrics?.syncedButEmpty && (
+        <div className="flex items-start gap-3 px-5 py-4 bg-[#111114] border border-amber-500/20 rounded-xl">
+          <AlertCircle size={15} className="text-amber-500 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm text-zinc-300 font-medium">No ad spend found in the last 30 days</p>
+            <p className="text-xs text-zinc-500 mt-1">
+              Your Meta &amp; Google accounts are connected and sync ran successfully
+              {metrics.lastSyncedAt && (
+                <> on {new Date(metrics.lastSyncedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</>
+              )}, but there was no campaign spend data returned.
+              This usually means all campaigns are paused or have zero budget. Activate a campaign to start seeing data here.
+            </p>
+          </div>
         </div>
       )}
 

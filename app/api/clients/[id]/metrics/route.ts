@@ -12,24 +12,49 @@ export async function GET(req: NextRequest, { params }: Params) {
   since.setDate(since.getDate() - days);
   const sinceStr = since.toISOString().split("T")[0];
 
-  const { data, error } = await adminSupabase
-    .from("ad_metrics")
-    .select("platform, date, spend, clicks, impressions, leads, cpl, roas, synced_at")
-    .eq("client_id", id)
-    .gte("date", sinceStr)
-    .order("date", { ascending: true });
+  // Fetch ad_metrics rows AND the client's last_synced_at in parallel
+  const [metricsRes, clientRes] = await Promise.all([
+    adminSupabase
+      .from("ad_metrics")
+      .select("platform, date, spend, clicks, impressions, leads, cpl, roas, synced_at")
+      .eq("client_id", id)
+      .gte("date", sinceStr)
+      .order("date", { ascending: true }),
+    adminSupabase
+      .from("clients")
+      .select("last_synced_at")
+      .eq("id", id)
+      .maybeSingle(),
+  ]);
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  if (metricsRes.error) {
+    return NextResponse.json({ error: metricsRes.error.message }, { status: 500 });
   }
 
-  if (!data || data.length === 0) {
+  const data             = metricsRes.data ?? [];
+  const clientSyncedAt   = (clientRes.data as { last_synced_at?: string | null } | null)?.last_synced_at ?? null;
+
+  // Never synced at all
+  if (!clientSyncedAt && data.length === 0) {
     return NextResponse.json({
-      hasData:      false,
-      totals:       { spend: 0, clicks: 0, impressions: 0, leads: 0, ctr: 0, cpl: 0, roas: 0 },
-      byPlatform:   { meta: zeroBlock(), google: zeroBlock() },
-      sparklines:   { spend: [], clicks: [], impressions: [], leads: [], cpl: [] },
-      lastSyncedAt: null,
+      hasData:          false,
+      syncedButEmpty:   false,
+      totals:           { spend: 0, clicks: 0, impressions: 0, leads: 0, ctr: 0, cpl: 0, roas: 0 },
+      byPlatform:       { meta: zeroBlock(), google: zeroBlock() },
+      sparklines:       { spend: [], clicks: [], impressions: [], leads: [], cpl: [] },
+      lastSyncedAt:     null,
+    });
+  }
+
+  // Synced but no spend rows in this period
+  if (data.length === 0) {
+    return NextResponse.json({
+      hasData:          false,
+      syncedButEmpty:   true,
+      totals:           { spend: 0, clicks: 0, impressions: 0, leads: 0, ctr: 0, cpl: 0, roas: 0 },
+      byPlatform:       { meta: zeroBlock(), google: zeroBlock() },
+      sparklines:       { spend: [], clicks: [], impressions: [], leads: [], cpl: [] },
+      lastSyncedAt:     clientSyncedAt,
     });
   }
 
@@ -83,13 +108,15 @@ export async function GET(req: NextRequest, { params }: Params) {
     cpl:         sortedDays.map(([, v]) => v.leads > 0 ? v.spend / v.leads : 0),
   };
 
-  const lastSyncedAt = data.reduce((max: string | null, row) => {
+  const rowSyncedAt = data.reduce((max: string | null, row) => {
     if (!row.synced_at) return max;
     return !max || row.synced_at > max ? row.synced_at : max;
   }, null);
+  const lastSyncedAt = rowSyncedAt ?? clientSyncedAt;
 
   return NextResponse.json({
-    hasData: true,
+    hasData:        true,
+    syncedButEmpty: false,
     totals: {
       spend:       Math.round(totalSpend * 100) / 100,
       clicks:      totalClicks,

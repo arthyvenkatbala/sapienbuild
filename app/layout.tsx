@@ -3,8 +3,8 @@ import SidebarNav from "@/components/layout/SidebarNav";
 import { ClientProvider } from "@/lib/client-context";
 
 export const metadata = {
-  title: "One Thousand Tales — Marketing Intelligence",
-  description: "AI-powered photography marketing CRM",
+  title: "One Thousand Tales — OTT Platform",
+  description: "Internal operations platform for One Thousand Tales photography studio",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
