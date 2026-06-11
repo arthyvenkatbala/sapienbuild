@@ -13,6 +13,7 @@ import {
   FileText,
   Settings,
   Sparkles,
+  Building2,
   type LucideIcon,
 } from "lucide-react";
 
@@ -47,8 +48,9 @@ const NAV: NavGroup[] = [
   {
     group: "CRM",
     items: [
-      { label: "Leads",  href: "/leads",  icon: Users },
-      { label: "Quotes", href: "/quotes", icon: FileText },
+      { label: "Clients", href: "/clients", icon: Building2 },
+      { label: "Leads",   href: "/leads",   icon: Users },
+      { label: "Quotes",  href: "/quotes",  icon: FileText },
     ],
   },
   {
@@ -87,7 +89,10 @@ export default function SidebarNav() {
             <div className="space-y-0.5">
               {group.items.map((item) => {
                 const Icon = item.icon;
-                const isActive = pathname === item.href;
+                const isActive =
+                  item.href === "/"
+                    ? pathname === "/"
+                    : pathname === item.href || pathname.startsWith(`${item.href}/`);
                 return (
                   <Link
                     key={item.href}
