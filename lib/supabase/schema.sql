@@ -94,14 +94,17 @@ ALTER TABLE public.ad_metrics ENABLE ROW LEVEL SECURITY;
 -- If you later add Supabase Auth, replace 'false' with:
 --   auth.uid() = owner_user_id   (add an owner_user_id column)
 
+DROP POLICY IF EXISTS "block_anon_clients" ON public.clients;
 CREATE POLICY "block_anon_clients" ON public.clients
   FOR ALL TO anon USING (false);
 
+DROP POLICY IF EXISTS "block_anon_ad_metrics" ON public.ad_metrics;
 CREATE POLICY "block_anon_ad_metrics" ON public.ad_metrics
   FOR ALL TO anon USING (false);
 
 ALTER TABLE public.leads ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "block_anon_leads" ON public.leads;
 CREATE POLICY "block_anon_leads" ON public.leads
   FOR ALL TO anon USING (false);
 
@@ -149,6 +152,7 @@ CREATE INDEX IF NOT EXISTS quotes_status_idx     ON public.quotes (status);
 CREATE INDEX IF NOT EXISTS quotes_created_at_idx ON public.quotes (created_at DESC);
 
 ALTER TABLE public.quotes ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "block_anon_quotes" ON public.quotes;
 CREATE POLICY "block_anon_quotes" ON public.quotes
   FOR ALL TO anon USING (false);
 
@@ -178,8 +182,10 @@ CREATE TRIGGER contacts_updated_at
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
 ALTER TABLE public.contacts ENABLE ROW LEVEL SECURITY;
-CREATE POLICY IF NOT EXISTS "contacts_service_role"    ON public.contacts FOR ALL TO service_role  USING (true) WITH CHECK (true);
-CREATE POLICY IF NOT EXISTS "contacts_authenticated"   ON public.contacts FOR ALL TO authenticated USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "contacts_service_role"  ON public.contacts;
+DROP POLICY IF EXISTS "contacts_authenticated" ON public.contacts;
+CREATE POLICY "contacts_service_role"  ON public.contacts FOR ALL TO service_role  USING (true) WITH CHECK (true);
+CREATE POLICY "contacts_authenticated" ON public.contacts FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 -- ── projects ─────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.projects (
@@ -211,8 +217,10 @@ CREATE INDEX IF NOT EXISTS projects_workflow_stage_idx ON public.projects (workf
 CREATE INDEX IF NOT EXISTS projects_event_date_idx     ON public.projects (event_date);
 
 ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
-CREATE POLICY IF NOT EXISTS "projects_service_role"  ON public.projects FOR ALL TO service_role  USING (true) WITH CHECK (true);
-CREATE POLICY IF NOT EXISTS "projects_authenticated" ON public.projects FOR ALL TO authenticated USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "projects_service_role"  ON public.projects;
+DROP POLICY IF EXISTS "projects_authenticated" ON public.projects;
+CREATE POLICY "projects_service_role"  ON public.projects FOR ALL TO service_role  USING (true) WITH CHECK (true);
+CREATE POLICY "projects_authenticated" ON public.projects FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 -- ── project_tasks ─────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.project_tasks (
@@ -236,8 +244,10 @@ CREATE TRIGGER project_tasks_updated_at
 CREATE INDEX IF NOT EXISTS project_tasks_project_id_idx ON public.project_tasks (project_id);
 
 ALTER TABLE public.project_tasks ENABLE ROW LEVEL SECURITY;
-CREATE POLICY IF NOT EXISTS "project_tasks_service_role"  ON public.project_tasks FOR ALL TO service_role  USING (true) WITH CHECK (true);
-CREATE POLICY IF NOT EXISTS "project_tasks_authenticated" ON public.project_tasks FOR ALL TO authenticated USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "project_tasks_service_role"  ON public.project_tasks;
+DROP POLICY IF EXISTS "project_tasks_authenticated" ON public.project_tasks;
+CREATE POLICY "project_tasks_service_role"  ON public.project_tasks FOR ALL TO service_role  USING (true) WITH CHECK (true);
+CREATE POLICY "project_tasks_authenticated" ON public.project_tasks FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 -- ── workflow_events ───────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.workflow_events (
@@ -254,8 +264,10 @@ CREATE INDEX IF NOT EXISTS workflow_events_project_id_idx ON public.workflow_eve
 CREATE INDEX IF NOT EXISTS workflow_events_created_at_idx ON public.workflow_events (created_at DESC);
 
 ALTER TABLE public.workflow_events ENABLE ROW LEVEL SECURITY;
-CREATE POLICY IF NOT EXISTS "workflow_events_service_role"  ON public.workflow_events FOR ALL TO service_role  USING (true) WITH CHECK (true);
-CREATE POLICY IF NOT EXISTS "workflow_events_authenticated" ON public.workflow_events FOR ALL TO authenticated USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "workflow_events_service_role"  ON public.workflow_events;
+DROP POLICY IF EXISTS "workflow_events_authenticated" ON public.workflow_events;
+CREATE POLICY "workflow_events_service_role"  ON public.workflow_events FOR ALL TO service_role  USING (true) WITH CHECK (true);
+CREATE POLICY "workflow_events_authenticated" ON public.workflow_events FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 -- ── invoices ─────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.invoices (
@@ -283,8 +295,10 @@ CREATE INDEX IF NOT EXISTS invoices_status_idx     ON public.invoices (status);
 CREATE INDEX IF NOT EXISTS invoices_created_at_idx ON public.invoices (created_at DESC);
 
 ALTER TABLE public.invoices ENABLE ROW LEVEL SECURITY;
-CREATE POLICY IF NOT EXISTS "invoices_service_role"  ON public.invoices FOR ALL TO service_role  USING (true) WITH CHECK (true);
-CREATE POLICY IF NOT EXISTS "invoices_authenticated" ON public.invoices FOR ALL TO authenticated USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "invoices_service_role"  ON public.invoices;
+DROP POLICY IF EXISTS "invoices_authenticated" ON public.invoices;
+CREATE POLICY "invoices_service_role"  ON public.invoices FOR ALL TO service_role  USING (true) WITH CHECK (true);
+CREATE POLICY "invoices_authenticated" ON public.invoices FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 -- ── assets ───────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.assets (
@@ -309,5 +323,7 @@ CREATE TRIGGER assets_updated_at
 CREATE INDEX IF NOT EXISTS assets_category_idx ON public.assets (category);
 
 ALTER TABLE public.assets ENABLE ROW LEVEL SECURITY;
-CREATE POLICY IF NOT EXISTS "assets_service_role"  ON public.assets FOR ALL TO service_role  USING (true) WITH CHECK (true);
-CREATE POLICY IF NOT EXISTS "assets_authenticated" ON public.assets FOR ALL TO authenticated USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "assets_service_role"  ON public.assets;
+DROP POLICY IF EXISTS "assets_authenticated" ON public.assets;
+CREATE POLICY "assets_service_role"  ON public.assets FOR ALL TO service_role  USING (true) WITH CHECK (true);
+CREATE POLICY "assets_authenticated" ON public.assets FOR ALL TO authenticated USING (true) WITH CHECK (true);
