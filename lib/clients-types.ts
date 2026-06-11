@@ -4,6 +4,7 @@ export interface Client {
   owner_name:             string;
   email:                  string;
   phone:                  string;
+  website_url:            string | null;
   meta_ad_account_id:     string | null;
   meta_user_id:           string | null;
   google_customer_id:     string | null;
@@ -13,6 +14,19 @@ export interface Client {
   created_at:             string;
   updated_at:             string;
   // tokens are never returned to the frontend
+}
+
+export interface DbLead {
+  id:         string;
+  client_id:  string;
+  clientname: string;
+  phone:      string;
+  email:      string;
+  source:     string;
+  eventtype:  string | null;
+  campaign:   string | null;
+  status:     string;
+  created_at: string;
 }
 
 export interface AdMetric {

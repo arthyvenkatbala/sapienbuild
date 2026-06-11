@@ -227,6 +227,7 @@ function ClientSelector() {
 
 export default function SidebarNav() {
   const pathname = usePathname();
+  const { selectedClient } = useClientContext();
 
   return (
     <aside className="w-60 shrink-0 bg-[#0d0d10] border-r border-white/[0.06] flex-col hidden md:flex">
@@ -237,9 +238,9 @@ export default function SidebarNav() {
             <Sparkles size={14} className="text-white" />
           </div>
           <div>
-            <p className="text-sm font-semibold text-white leading-none">OTT CRM</p>
+            <p className="text-sm font-semibold text-white leading-none">SapienBuildCRM</p>
             <p className="text-[10px] text-zinc-500 mt-0.5 leading-none">
-              Marketing Intelligence
+              {selectedClient ? selectedClient.business_name : "No client selected"}
             </p>
           </div>
         </div>

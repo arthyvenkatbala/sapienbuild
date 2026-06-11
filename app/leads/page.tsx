@@ -1,15 +1,17 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
   Search, SlidersHorizontal, Download, UserPlus,
-  Kanban, List, X, Flame, TrendingUp,
+  Kanban, List, X, Flame, Globe, AlertCircle,
 } from "lucide-react";
 import {
   Lead, KanbanStage, ExecutiveStatus, AiLabel, LeadSource,
   initialLeads,
 } from "@/lib/leads-data";
+import type { DbLead } from "@/lib/clients-types";
+import { useClientContext } from "@/lib/client-context";
 import LeadOverviewCards   from "@/components/leads/LeadOverviewCards";
 import LeadKanban          from "@/components/leads/LeadKanban";
 import LeadDetailDrawer    from "@/components/leads/LeadDetailDrawer";
@@ -110,6 +112,113 @@ function LeadListView({
         )}
       </div>
     </div>
+  );
+}
+
+// ── Website Enquiries (real Supabase data) ─────────────────────────────────────
+function WebsiteEnquiriesSection() {
+  const { selectedClient } = useClientContext();
+  const [leads,   setLeads]   = useState<DbLead[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error,   setError]   = useState("");
+
+  useEffect(() => {
+    if (!selectedClient) { setLeads([]); return; }
+    setLoading(true);
+    setError("");
+    fetch(`/api/clients/${selectedClient.id}/leads`)
+      .then((r) => r.json())
+      .then((d) => setLeads(d.leads ?? []))
+      .catch(() => setError("Failed to load enquiries"))
+      .finally(() => setLoading(false));
+  }, [selectedClient]);
+
+  return (
+    <section>
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <Globe size={13} className="text-purple-400" />
+          <p className="text-xs font-semibold uppercase tracking-widest text-zinc-600">
+            Website Enquiries
+          </p>
+          {selectedClient && (
+            <span className="text-[10px] text-zinc-700 font-normal normal-case tracking-normal">
+              · {selectedClient.business_name}
+            </span>
+          )}
+        </div>
+        {leads.length > 0 && (
+          <span className="text-[10px] text-zinc-600">{leads.length} enquir{leads.length === 1 ? "y" : "ies"}</span>
+        )}
+      </div>
+
+      {!selectedClient ? (
+        <div className="flex items-center gap-2 p-4 bg-[#111114] border border-white/[0.06] rounded-2xl text-zinc-600">
+          <AlertCircle size={13} className="shrink-0" />
+          <p className="text-xs">Select a client from the sidebar to view their website enquiries.</p>
+        </div>
+      ) : loading ? (
+        <div className="bg-[#111114] border border-white/[0.06] rounded-2xl overflow-hidden">
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="h-12 border-b border-white/[0.04] animate-pulse bg-white/[0.01]" />
+          ))}
+        </div>
+      ) : error ? (
+        <div className="flex items-center gap-2 p-4 bg-red-500/05 border border-red-500/15 rounded-2xl text-red-400">
+          <AlertCircle size={13} className="shrink-0" />
+          <p className="text-xs">{error}</p>
+        </div>
+      ) : leads.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-12 bg-[#111114] border border-white/[0.06] rounded-2xl text-zinc-600">
+          <Globe size={24} className="mb-2 opacity-30" />
+          <p className="text-sm">No website enquiries yet</p>
+          {!selectedClient.website_url && (
+            <p className="text-xs mt-1 text-zinc-700">
+              Add a website URL in the client profile to enable the integration.
+            </p>
+          )}
+        </div>
+      ) : (
+        <div className="bg-[#111114] border border-white/[0.07] rounded-2xl overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-white/[0.06]">
+                  {["Name", "Email", "Phone", "Event / Service", "Message", "Status", "Received"].map((h) => (
+                    <th key={h} className="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/[0.04]">
+                {leads.map((lead) => (
+                  <tr key={lead.id} className="hover:bg-white/[0.02] transition-colors">
+                    <td className="px-4 py-3 font-medium text-white whitespace-nowrap">{lead.clientname}</td>
+                    <td className="px-4 py-3 text-zinc-400 text-xs">{lead.email}</td>
+                    <td className="px-4 py-3 text-zinc-400 text-xs whitespace-nowrap">{lead.phone}</td>
+                    <td className="px-4 py-3 text-zinc-400 text-xs">{lead.eventtype ?? "—"}</td>
+                    <td className="px-4 py-3 text-zinc-500 text-xs max-w-[200px] truncate" title={lead.campaign ?? ""}>
+                      {lead.campaign ?? "—"}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="inline-flex items-center text-[10px] font-medium px-2 py-0.5 rounded-full bg-green-500/10 border border-green-500/20 text-green-400">
+                        {lead.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-zinc-600 text-xs whitespace-nowrap">
+                      {new Date(lead.created_at).toLocaleDateString("en-IN", {
+                        day: "numeric", month: "short", year: "numeric",
+                      })}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -318,6 +427,9 @@ export default function LeadsPage() {
             <LeadListView leads={filteredLeads} onSelectLead={openLead} />
           )}
         </section>
+
+        {/* ── Website Enquiries (live from Supabase) ────────────────── */}
+        <WebsiteEnquiriesSection />
 
         {/* ── Source Analytics + AI Follow-Ups ─────────────────────── */}
         <LeadSourceAnalytics />

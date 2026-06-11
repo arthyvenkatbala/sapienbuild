@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Plus, Search, X, Users, CheckCircle,
-  Building2, Phone, Mail, ExternalLink, Trash2,
+  Building2, Phone, Mail, ExternalLink, Trash2, Globe,
 } from "lucide-react";
 import Link from "next/link";
 import type { Client } from "@/lib/clients-types";
@@ -14,7 +14,7 @@ function CreateClientModal({
   onClose,
   onCreate,
 }: { onClose: () => void; onCreate: (c: Client) => void }) {
-  const [form, setForm] = useState({ business_name: "", owner_name: "", email: "", phone: "" });
+  const [form, setForm] = useState({ business_name: "", owner_name: "", email: "", phone: "", website_url: "" });
   const [saving, setSaving] = useState(false);
   const [error,  setError]  = useState("");
 
@@ -72,10 +72,11 @@ function CreateClientModal({
           )}
 
           {[
-            { key: "business_name", label: "Business Name *", placeholder: "OTT Photography Studio" },
-            { key: "owner_name",    label: "Owner / Contact Name",  placeholder: "Dilip Kumar" },
-            { key: "email",         label: "Email",                 placeholder: "client@email.com" },
-            { key: "phone",         label: "Phone",                 placeholder: "+91 98765 43210" },
+            { key: "business_name", label: "Business Name *",       placeholder: "OTT Photography Studio" },
+            { key: "owner_name",    label: "Owner / Contact Name",   placeholder: "Dilip Kumar" },
+            { key: "email",         label: "Email",                  placeholder: "client@email.com" },
+            { key: "phone",         label: "Phone",                  placeholder: "+91 98765 43210" },
+            { key: "website_url",   label: "Website URL",            placeholder: "https://www.example.com" },
           ].map(({ key, label, placeholder }) => (
             <div key={key} className="space-y-1.5">
               <label className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">{label}</label>
@@ -168,6 +169,12 @@ function ClientCard({ client, onDelete }: { client: Client; onDelete: (id: strin
             <div className="flex items-center gap-2 text-zinc-500">
               <Phone size={11} />
               <span className="text-[11px]">{client.phone}</span>
+            </div>
+          )}
+          {client.website_url && (
+            <div className="flex items-center gap-2 text-zinc-500">
+              <Globe size={11} />
+              <span className="text-[11px] truncate">{client.website_url.replace(/^https?:\/\//, "")}</span>
             </div>
           )}
         </div>

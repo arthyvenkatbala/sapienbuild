@@ -63,6 +63,25 @@ CREATE INDEX IF NOT EXISTS ad_metrics_client_id_idx  ON public.ad_metrics (clien
 CREATE INDEX IF NOT EXISTS ad_metrics_date_idx       ON public.ad_metrics (date DESC);
 CREATE INDEX IF NOT EXISTS ad_metrics_platform_idx   ON public.ad_metrics (platform);
 
+-- ── leads table ───────────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS public.leads (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  client_id   uuid NOT NULL REFERENCES public.clients(id) ON DELETE CASCADE,
+  clientname  text NOT NULL DEFAULT '',
+  phone       text NOT NULL DEFAULT '',
+  email       text NOT NULL DEFAULT '',
+  source      text NOT NULL DEFAULT 'Website Enquiry',
+  eventtype   text,
+  campaign    text,
+  status      text NOT NULL DEFAULT 'New Lead',
+  created_at  timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS leads_client_id_idx  ON public.leads (client_id);
+CREATE INDEX IF NOT EXISTS leads_created_at_idx ON public.leads (created_at DESC);
+CREATE INDEX IF NOT EXISTS leads_email_idx      ON public.leads (email);
+
 -- ── Row Level Security ────────────────────────────────────────────────────────
 -- The service role key (used in API routes) bypasses RLS automatically.
 -- These policies prevent the anon/public key from accessing sensitive data.
@@ -80,3 +99,12 @@ CREATE POLICY "block_anon_clients" ON public.clients
 
 CREATE POLICY "block_anon_ad_metrics" ON public.ad_metrics
   FOR ALL TO anon USING (false);
+
+ALTER TABLE public.leads ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "block_anon_leads" ON public.leads
+  FOR ALL TO anon USING (false);
+
+-- ── Migration: add website_url to existing clients table ──────────────────────
+-- Safe to run on an existing DB; does nothing if the column already exists.
+ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS website_url text;

@@ -10,7 +10,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
   const { data, error } = await adminSupabase
     .from("clients")
     .select(`
-      id, business_name, owner_name, email, phone,
+      id, business_name, owner_name, email, phone, website_url,
       meta_ad_account_id, meta_user_id,
       google_customer_id, google_ads_account_name,
       connected_platforms, last_synced_at, created_at, updated_at
@@ -40,7 +40,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   }
 
   // Only allow updating the non-sensitive public fields
-  const allowed = ["business_name", "owner_name", "email", "phone"] as const;
+  const allowed = ["business_name", "owner_name", "email", "phone", "website_url"] as const;
   const patch: Record<string, string> = {};
   for (const key of allowed) {
     if (key in body) patch[key] = String(body[key]).trim();
@@ -55,7 +55,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     .update(patch)
     .eq("id", id)
     .select(`
-      id, business_name, owner_name, email, phone,
+      id, business_name, owner_name, email, phone, website_url,
       meta_ad_account_id, meta_user_id,
       google_customer_id, google_ads_account_name,
       connected_platforms, last_synced_at, created_at, updated_at

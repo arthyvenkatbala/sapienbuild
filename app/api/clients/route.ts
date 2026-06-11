@@ -6,7 +6,7 @@ export async function GET() {
   const { data, error } = await adminSupabase
     .from("clients")
     .select(`
-      id, business_name, owner_name, email, phone,
+      id, business_name, owner_name, email, phone, website_url,
       meta_ad_account_id, meta_user_id,
       google_customer_id, google_ads_account_name,
       connected_platforms, last_synced_at, created_at, updated_at
@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
 
-  const { business_name, owner_name, email, phone } = body;
+  const { business_name, owner_name, email, phone, website_url } = body;
 
   if (!business_name?.trim()) {
     return NextResponse.json({ error: "business_name is required" }, { status: 422 });
@@ -43,9 +43,10 @@ export async function POST(request: NextRequest) {
       owner_name:    (owner_name ?? "").trim(),
       email:         (email ?? "").trim().toLowerCase(),
       phone:         (phone ?? "").trim(),
+      website_url:   (website_url ?? "").trim() || null,
     }])
     .select(`
-      id, business_name, owner_name, email, phone,
+      id, business_name, owner_name, email, phone, website_url,
       connected_platforms, last_synced_at, created_at, updated_at
     `)
     .single();

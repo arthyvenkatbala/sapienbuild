@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft, CheckCircle, AlertCircle, RefreshCw, Save,
   Building2, User, Mail, Phone, Link2, ExternalLink,
-  BarChart2, Clock, Unlink,
+  BarChart2, Clock, Unlink, Globe, Copy, Check,
 } from "lucide-react";
 import Link from "next/link";
 import type { Client, SyncResult } from "@/lib/clients-types";
@@ -230,7 +230,8 @@ export default function ClientProfilePage({ params }: { params: Promise<{ id: st
   const [dirty,    setDirty]    = useState(false);
 
   // Editable form state (local copy of client fields)
-  const [form, setForm] = useState({ business_name: "", owner_name: "", email: "", phone: "" });
+  const [form, setForm] = useState({ business_name: "", owner_name: "", email: "", phone: "", website_url: "" });
+  const [copied, setCopied] = useState(false);
 
   const dismissToast = useCallback(() => setToast(null), []);
 
@@ -247,6 +248,7 @@ export default function ClientProfilePage({ params }: { params: Promise<{ id: st
         owner_name:    c.owner_name,
         email:         c.email,
         phone:         c.phone,
+        website_url:   c.website_url ?? "",
       });
     } catch (e) {
       console.error(e);
@@ -462,6 +464,18 @@ export default function ClientProfilePage({ params }: { params: Promise<{ id: st
               onChange={handleFieldChange("phone")}
               icon={Phone}
             />
+            <div className="sm:col-span-2">
+              <EditField
+                label="Website URL"
+                value={form.website_url}
+                onChange={handleFieldChange("website_url")}
+                icon={Globe}
+                type="url"
+              />
+              <p className="text-[10px] text-zinc-600 mt-1.5 px-0.5">
+                Used to validate cross-origin enquiry submissions from this client&apos;s website.
+              </p>
+            </div>
           </div>
         </motion.div>
 
@@ -505,11 +519,75 @@ export default function ClientProfilePage({ params }: { params: Promise<{ id: st
           </div>
         </motion.div>
 
+        {/* ── Website Enquiry Integration ───────────────────────────────── */}
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.12 }}
+          className="bg-[#111114] border border-white/[0.07] rounded-2xl p-6"
+        >
+          <div className="flex items-center gap-2 mb-5">
+            <div className="w-6 h-6 rounded-lg bg-purple-500/15 border border-purple-500/25 flex items-center justify-center">
+              <Globe size={11} className="text-purple-400" />
+            </div>
+            <h2 className="text-sm font-semibold text-white">Website Enquiry Integration</h2>
+          </div>
+
+          {!form.website_url ? (
+            <div className="flex flex-col items-center justify-center py-8 text-zinc-600">
+              <Globe size={22} className="mb-3 opacity-30" />
+              <p className="text-sm">No website URL configured</p>
+              <p className="text-xs mt-1 text-zinc-700">Add the client&apos;s website URL above and save to generate the embed snippet.</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <p className="text-xs text-zinc-500 leading-relaxed">
+                Paste this fetch call into the client&apos;s website contact form. Enquiries will appear in the{" "}
+                <span className="text-white">Leads</span> section filtered to this client.
+              </p>
+
+              <div className="relative">
+                <pre className="bg-[#0d0d10] border border-white/[0.07] rounded-xl p-4 text-[11px] text-zinc-400 leading-relaxed overflow-x-auto whitespace-pre-wrap break-all">
+{`fetch("${process.env.NEXT_PUBLIC_APP_URL ?? ""}/api/website-enquiry?client_id=${id}", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    name:    formData.name,
+    email:   formData.email,
+    phone:   formData.phone,
+    message: formData.message,
+    // optional: services: ["Wedding", "Portrait"]
+  })
+})`}
+                </pre>
+                <button
+                  onClick={() => {
+                    const snippet = `fetch("${process.env.NEXT_PUBLIC_APP_URL ?? ""}/api/website-enquiry?client_id=${id}", {\n  method: "POST",\n  headers: { "Content-Type": "application/json" },\n  body: JSON.stringify({\n    name:    formData.name,\n    email:   formData.email,\n    phone:   formData.phone,\n    message: formData.message,\n  })\n})`;
+                    navigator.clipboard.writeText(snippet);
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
+                  }}
+                  className="absolute top-3 right-3 flex items-center gap-1.5 text-[10px] px-2.5 py-1.5 rounded-lg bg-white/[0.06] hover:bg-white/[0.10] text-zinc-400 hover:text-white border border-white/[0.07] transition-all"
+                >
+                  {copied ? <><Check size={10} className="text-green-400" /> Copied</> : <><Copy size={10} /> Copy</>}
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2 p-3 bg-amber-500/05 border border-amber-500/15 rounded-xl">
+                <AlertCircle size={12} className="text-amber-400 shrink-0" />
+                <p className="text-[11px] text-amber-300/80">
+                  Only requests from <span className="font-mono text-amber-200">{form.website_url}</span> will be accepted.
+                </p>
+              </div>
+            </div>
+          )}
+        </motion.div>
+
         {/* ── Sync & Metrics ─────────────────────────────────────────────── */}
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, delay: 0.16 }}
+          transition={{ duration: 0.3, delay: 0.20 }}
           className="bg-[#111114] border border-white/[0.07] rounded-2xl p-6"
         >
           <div className="flex items-center justify-between mb-5">
