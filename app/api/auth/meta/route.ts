@@ -15,8 +15,6 @@ const META_SCOPES = [
   "ads_read",
   "ads_management",
   "business_management",
-  "email",
-  "public_profile",
 ].join(",");
 
 export async function GET(request: NextRequest) {
