@@ -2,9 +2,14 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Plus, X, Receipt, DollarSign, FileText, CheckCircle } from "lucide-react";
+import Link from "next/link";
+import {
+  Plus, X, Receipt, DollarSign, FileText, CheckCircle,
+  ExternalLink, IndianRupee,
+} from "lucide-react";
+import { useToast } from "@/lib/toast";
 
-type InvoiceType = "quote" | "invoice" | "receipt";
+type InvoiceType   = "quote" | "invoice" | "receipt";
 type InvoiceStatus = "draft" | "sent" | "paid" | "cancelled";
 
 interface Invoice {
@@ -19,16 +24,8 @@ interface Invoice {
   contact: { id: string; first_name: string; last_name: string } | null;
 }
 
-interface Contact {
-  id: string;
-  first_name: string;
-  last_name: string;
-}
-
-interface Project {
-  id: string;
-  title: string;
-}
+interface Contact { id: string; first_name: string; last_name: string }
+interface Project  { id: string; title: string }
 
 const STATUS_COLORS: Record<InvoiceStatus, string> = {
   draft:     "bg-zinc-500/20 text-zinc-400 border-zinc-500/30",
@@ -44,6 +41,11 @@ const TAB_TYPES: { key: InvoiceType | "all"; label: string }[] = [
   { key: "receipt", label: "Receipts" },
 ];
 
+const inputCls =
+  "w-full bg-[#0d0d10] border border-white/[0.08] rounded-xl px-3 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-600 outline-none focus:border-green-500/40 transition-all";
+
+// ─── New Invoice Modal ────────────────────────────────────────────────────────
+
 function NewInvoiceModal({
   onClose,
   onAdd,
@@ -53,16 +55,12 @@ function NewInvoiceModal({
 }) {
   const [form, setForm] = useState({
     type: "invoice" as InvoiceType,
-    contact_id: "",
-    project_id: "",
-    amount: "",
-    due_date: "",
-    notes: "",
+    contact_id: "", project_id: "", amount: "", due_date: "", notes: "",
   });
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
-  const [saving, setSaving]     = useState(false);
-  const [error, setError]       = useState("");
+  const [saving,   setSaving]   = useState(false);
+  const [error,    setError]    = useState("");
 
   useEffect(() => {
     Promise.all([
@@ -77,10 +75,7 @@ function NewInvoiceModal({
 
   const handle = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.amount || isNaN(Number(form.amount))) {
-      setError("Amount is required");
-      return;
-    }
+    if (!form.amount || isNaN(Number(form.amount))) { setError("Amount is required"); return; }
     setSaving(true);
     try {
       const res  = await fetch("/api/invoices", {
@@ -99,9 +94,6 @@ function NewInvoiceModal({
     }
   };
 
-  const inputCls =
-    "w-full bg-[#0d0d10] border border-white/[0.08] rounded-xl px-3 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-600 outline-none focus:border-green-500/40 transition-all";
-
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -119,25 +111,18 @@ function NewInvoiceModal({
       >
         <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.07]">
           <h2 className="text-sm font-semibold text-white">New Document</h2>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg hover:bg-white/[0.06] text-zinc-500 hover:text-white transition-all"
-          >
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/[0.06] text-zinc-500 hover:text-white transition-all">
             <X size={15} />
           </button>
         </div>
 
         <form onSubmit={handle} className="p-6 space-y-4">
           {error && (
-            <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2">
-              {error}
-            </p>
+            <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2">{error}</p>
           )}
 
           <div className="space-y-1.5">
-            <label className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
-              Type
-            </label>
+            <label className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Type</label>
             <div className="flex gap-2">
               {(["quote", "invoice", "receipt"] as InvoiceType[]).map((t) => (
                 <button
@@ -157,32 +142,18 @@ function NewInvoiceModal({
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
-              Client
-            </label>
-            <select
-              className={inputCls}
-              value={form.contact_id}
-              onChange={(e) => setForm((f) => ({ ...f, contact_id: e.target.value }))}
-            >
+            <label className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Client</label>
+            <select className={inputCls} value={form.contact_id} onChange={(e) => setForm((f) => ({ ...f, contact_id: e.target.value }))}>
               <option value="">Select client…</option>
               {contacts.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.first_name} {c.last_name}
-                </option>
+                <option key={c.id} value={c.id}>{c.first_name} {c.last_name}</option>
               ))}
             </select>
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
-              Project
-            </label>
-            <select
-              className={inputCls}
-              value={form.project_id}
-              onChange={(e) => setForm((f) => ({ ...f, project_id: e.target.value }))}
-            >
+            <label className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Project</label>
+            <select className={inputCls} value={form.project_id} onChange={(e) => setForm((f) => ({ ...f, project_id: e.target.value }))}>
               <option value="">Select project…</option>
               {projects.map((p) => (
                 <option key={p.id} value={p.id}>{p.title}</option>
@@ -192,55 +163,23 @@ function NewInvoiceModal({
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <label className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
-                Amount (₹) *
-              </label>
-              <input
-                type="number"
-                className={inputCls}
-                placeholder="75000"
-                value={form.amount}
-                onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
-              />
+              <label className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Amount (₹) *</label>
+              <input type="number" className={inputCls} placeholder="75000" value={form.amount} onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} />
             </div>
             <div className="space-y-1.5">
-              <label className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
-                Due Date
-              </label>
-              <input
-                type="date"
-                className={inputCls}
-                value={form.due_date}
-                onChange={(e) => setForm((f) => ({ ...f, due_date: e.target.value }))}
-              />
+              <label className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Due Date</label>
+              <input type="date" className={inputCls} value={form.due_date} onChange={(e) => setForm((f) => ({ ...f, due_date: e.target.value }))} />
             </div>
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
-              Notes
-            </label>
-            <input
-              className={inputCls}
-              placeholder="50% advance payment…"
-              value={form.notes}
-              onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-            />
+            <label className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Notes</label>
+            <input className={inputCls} placeholder="50% advance…" value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} />
           </div>
 
           <div className="flex gap-3 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 py-2.5 rounded-xl border border-white/[0.07] text-sm text-zinc-500 hover:text-white hover:border-white/[0.15] transition-all"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="flex-1 py-2.5 rounded-xl bg-green-600 hover:bg-green-500 disabled:opacity-50 text-sm font-medium text-white transition-all"
-            >
+            <button type="button" onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-white/[0.07] text-sm text-zinc-500 hover:text-white hover:border-white/[0.15] transition-all">Cancel</button>
+            <button type="submit" disabled={saving} className="flex-1 py-2.5 rounded-xl bg-green-600 hover:bg-green-500 disabled:opacity-50 text-sm font-medium text-white transition-all">
               {saving ? "Creating…" : "Create"}
             </button>
           </div>
@@ -250,16 +189,162 @@ function NewInvoiceModal({
   );
 }
 
-function InvoiceRow({ invoice }: { invoice: Invoice }) {
-  const TypeIcon =
-    invoice.type === "invoice"
-      ? FileText
-      : invoice.type === "receipt"
-      ? CheckCircle
-      : DollarSign;
+// ─── Invoice Detail Panel ─────────────────────────────────────────────────────
+
+function InvoiceDetailPanel({
+  invoice,
+  onClose,
+  onUpdate,
+}: {
+  invoice: Invoice;
+  onClose: () => void;
+  onUpdate: (inv: Invoice) => void;
+}) {
+  const toast   = useToast();
+  const [saving, setSaving] = useState<"paid" | "sent" | null>(null);
+
+  const markAs = async (status: "paid" | "sent") => {
+    setSaving(status);
+    try {
+      const res  = await fetch(`/api/invoices/${invoice.id}`, {
+        method:  "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ status }),
+      });
+      const data = await res.json();
+      if (!res.ok) { toast(data.error ?? "Update failed", "error"); return; }
+      onUpdate(data.invoice);
+      toast(status === "paid" ? "Invoice marked as paid" : "Invoice marked as sent");
+    } catch {
+      toast("Network error", "error");
+    } finally {
+      setSaving(null);
+    }
+  };
 
   return (
-    <div className="flex items-center gap-4 px-5 py-3.5 border-b border-white/[0.04] hover:bg-white/[0.02] transition-colors">
+    <>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-40 bg-black/60"
+        onClick={onClose}
+      />
+      <motion.div
+        initial={{ x: "100%" }}
+        animate={{ x: 0 }}
+        exit={{ x: "100%" }}
+        transition={{ type: "spring", damping: 30, stiffness: 300 }}
+        className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-sm bg-[#111114] border-l border-white/[0.08] flex flex-col shadow-2xl"
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.07] shrink-0">
+          <div>
+            <h2 className="text-sm font-semibold text-white capitalize">{invoice.type}</h2>
+            <p className="text-xs text-zinc-500 mt-0.5">
+              {invoice.contact ? `${invoice.contact.first_name} ${invoice.contact.last_name}` : "No client"}
+            </p>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/[0.06] text-zinc-500 hover:text-white transition-all">
+            <X size={15} />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+          {/* Amount */}
+          <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-4 text-center">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-600 mb-1">Amount</p>
+            <p className="text-2xl font-bold text-white">
+              ₹{Number(invoice.amount).toLocaleString("en-IN")}
+            </p>
+          </div>
+
+          {/* Status */}
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-semibold uppercase tracking-widest text-zinc-600">Status</span>
+            <span className={`text-[9px] font-semibold px-2 py-0.5 rounded-full border capitalize ${STATUS_COLORS[invoice.status]}`}>
+              {invoice.status}
+            </span>
+          </div>
+
+          {/* Fields */}
+          {[
+            { label: "Type",    value: invoice.type },
+            { label: "Due Date", value: invoice.due_date
+                ? new Date(invoice.due_date).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })
+                : "—" },
+            { label: "Created", value: new Date(invoice.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) },
+            { label: "Notes",   value: invoice.notes ?? "—" },
+          ].map(({ label, value }) => (
+            <div key={label}>
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-600">{label}</p>
+              <p className="text-sm text-zinc-300 mt-0.5 capitalize">{value}</p>
+            </div>
+          ))}
+
+          {/* Linked project */}
+          {invoice.project && (
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-600 mb-1">Linked Project</p>
+              <Link
+                href={`/projects/${invoice.project.id}`}
+                className="flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300 transition-colors"
+              >
+                {invoice.project.title}
+                <ExternalLink size={11} />
+              </Link>
+            </div>
+          )}
+        </div>
+
+        {/* Actions */}
+        <div className="px-6 py-4 border-t border-white/[0.07] shrink-0 space-y-2">
+          {invoice.status !== "paid" && invoice.status !== "cancelled" && (
+            <button
+              onClick={() => markAs("paid")}
+              disabled={saving !== null}
+              className="w-full py-2.5 rounded-xl bg-green-600 hover:bg-green-500 disabled:opacity-50 text-sm font-medium text-white transition-all flex items-center justify-center gap-2"
+            >
+              <CheckCircle size={14} />
+              {saving === "paid" ? "Marking…" : "Mark as Paid"}
+            </button>
+          )}
+          {invoice.status === "draft" && (
+            <button
+              onClick={() => markAs("sent")}
+              disabled={saving !== null}
+              className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-sm font-medium text-white transition-all"
+            >
+              {saving === "sent" ? "Marking…" : "Mark as Sent"}
+            </button>
+          )}
+        </div>
+      </motion.div>
+    </>
+  );
+}
+
+// ─── Invoice Row ──────────────────────────────────────────────────────────────
+
+function InvoiceRow({
+  invoice,
+  onClick,
+}: {
+  invoice: Invoice;
+  onClick: () => void;
+}) {
+  const TypeIcon =
+    invoice.type === "invoice" ? FileText :
+    invoice.type === "receipt" ? CheckCircle :
+    DollarSign;
+
+  return (
+    <button
+      onClick={onClick}
+      className="w-full flex items-center gap-4 px-5 py-3.5 border-b border-white/[0.04] hover:bg-white/[0.03] transition-colors text-left"
+    >
       <div className="w-7 h-7 rounded-lg bg-green-500/15 border border-green-500/25 flex items-center justify-center shrink-0">
         <TypeIcon size={12} className="text-green-400" />
       </div>
@@ -273,30 +358,30 @@ function InvoiceRow({ invoice }: { invoice: Invoice }) {
           {invoice.project?.title ?? "No project linked"}
         </p>
       </div>
+      <span className="text-[10px] text-zinc-600 capitalize shrink-0 hidden sm:block">{invoice.type}</span>
       <span className="text-[10px] text-zinc-500 hidden sm:block shrink-0">
         {invoice.due_date
           ? new Date(invoice.due_date).toLocaleDateString("en-IN", { day: "numeric", month: "short" })
           : "—"}
       </span>
-      <span
-        className={`text-[9px] font-semibold px-2 py-0.5 rounded-full border capitalize shrink-0 ${
-          STATUS_COLORS[invoice.status]
-        }`}
-      >
+      <span className={`text-[9px] font-semibold px-2 py-0.5 rounded-full border capitalize shrink-0 ${STATUS_COLORS[invoice.status]}`}>
         {invoice.status}
       </span>
       <span className="text-sm font-semibold text-white shrink-0 w-24 text-right">
         ₹{Number(invoice.amount).toLocaleString("en-IN")}
       </span>
-    </div>
+    </button>
   );
 }
 
+// ─── Page ─────────────────────────────────────────────────────────────────────
+
 export default function AccountsPage() {
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [loading, setLoading]   = useState(true);
-  const [tab, setTab]           = useState<InvoiceType | "all">("all");
-  const [showNew, setShowNew]   = useState(false);
+  const [invoices,  setInvoices]  = useState<Invoice[]>([]);
+  const [loading,   setLoading]   = useState(true);
+  const [tab,       setTab]       = useState<InvoiceType | "all">("all");
+  const [showNew,   setShowNew]   = useState(false);
+  const [selected,  setSelected]  = useState<Invoice | null>(null);
 
   const fetchInvoices = useCallback(async () => {
     setLoading(true);
@@ -323,12 +408,19 @@ export default function AccountsPage() {
     .filter((i) => i.status === "sent" || i.status === "draft")
     .reduce((s, i) => s + Number(i.amount), 0);
 
+  const handleUpdate = (updated: Invoice) => {
+    setInvoices((prev) =>
+      prev.map((inv) => (inv.id === updated.id ? { ...inv, ...updated } : inv))
+    );
+    setSelected((s) => (s?.id === updated.id ? { ...s, ...updated } : s));
+  };
+
   return (
     <div className="flex flex-col min-h-screen">
       <header className="sticky top-0 z-30 bg-[#0a0a0d]/80 backdrop-blur-md border-b border-white/[0.06] px-8 py-4 flex items-center justify-between">
         <div>
           <h1 className="text-base font-semibold text-white">Accounts</h1>
-          <p className="text-xs text-zinc-500">Quotes, invoices & receipts</p>
+          <p className="text-xs text-zinc-500">Quotes, invoices &amp; receipts</p>
         </div>
         <button
           onClick={() => setShowNew(true)}
@@ -339,24 +431,15 @@ export default function AccountsPage() {
       </header>
 
       <main className="flex-1 px-6 md:px-8 py-6 max-w-[1400px] w-full mx-auto space-y-5">
-
-        {/* Summary cards */}
+        {/* Summary */}
         <div className="grid grid-cols-2 gap-4">
           <div className="bg-[#111114] border border-white/[0.07] rounded-2xl p-4">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-600 mb-1">
-              Revenue (Paid)
-            </p>
-            <p className="text-xl font-bold text-green-400">
-              ₹{totalRevenue.toLocaleString("en-IN")}
-            </p>
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-600 mb-1">Revenue (Paid)</p>
+            <p className="text-xl font-bold text-green-400">₹{totalRevenue.toLocaleString("en-IN")}</p>
           </div>
           <div className="bg-[#111114] border border-white/[0.07] rounded-2xl p-4">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-600 mb-1">
-              Outstanding
-            </p>
-            <p className="text-xl font-bold text-yellow-400">
-              ₹{pending.toLocaleString("en-IN")}
-            </p>
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-600 mb-1">Outstanding</p>
+            <p className="text-xl font-bold text-yellow-400">₹{pending.toLocaleString("en-IN")}</p>
           </div>
         </div>
 
@@ -367,9 +450,7 @@ export default function AccountsPage() {
               key={key}
               onClick={() => setTab(key)}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                tab === key
-                  ? "bg-green-600 text-white"
-                  : "text-zinc-500 hover:text-zinc-300"
+                tab === key ? "bg-green-600 text-white" : "text-zinc-500 hover:text-zinc-300"
               }`}
             >
               {label}
@@ -382,6 +463,7 @@ export default function AccountsPage() {
           <div className="flex items-center gap-4 px-5 py-3 border-b border-white/[0.07] bg-white/[0.02]">
             <div className="w-7 shrink-0" />
             <p className="flex-1 text-[10px] font-semibold uppercase tracking-widest text-zinc-600">Client / Project</p>
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-600 shrink-0 hidden sm:block">Type</p>
             <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-600 shrink-0 hidden sm:block w-16">Due</p>
             <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-600 shrink-0 w-16">Status</p>
             <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-600 shrink-0 w-24 text-right">Amount</p>
@@ -407,7 +489,13 @@ export default function AccountsPage() {
               </button>
             </div>
           ) : (
-            filtered.map((inv) => <InvoiceRow key={inv.id} invoice={inv} />)
+            filtered.map((inv) => (
+              <InvoiceRow
+                key={inv.id}
+                invoice={inv}
+                onClick={() => setSelected(inv)}
+              />
+            ))
           )}
         </div>
       </main>
@@ -420,6 +508,13 @@ export default function AccountsPage() {
               setInvoices((prev) => [inv, ...prev]);
               setShowNew(false);
             }}
+          />
+        )}
+        {selected && (
+          <InvoiceDetailPanel
+            invoice={selected}
+            onClose={() => setSelected(null)}
+            onUpdate={handleUpdate}
           />
         )}
       </AnimatePresence>

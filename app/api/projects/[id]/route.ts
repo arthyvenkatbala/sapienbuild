@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminSupabase } from "@/lib/supabase-admin";
+import { moveProjectToStage } from "@/lib/workflow";
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -36,29 +37,57 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
   const { workflow_stage, from_stage, ...rest } = body as Record<string, string>;
 
-  const updateFields: Record<string, unknown> = { ...rest };
-  if (workflow_stage) updateFields.workflow_stage = workflow_stage;
+  // Handle non-stage field updates first
+  if (Object.keys(rest).length > 0) {
+    const { error } = await adminSupabase
+      .from("projects")
+      .update(rest)
+      .eq("id", id);
 
-  const { data, error } = await adminSupabase
+    if (error) {
+      console.error("[PATCH /api/projects/:id] field update:", error);
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+  }
+
+  // Handle stage transition via single source of truth
+  if (workflow_stage && workflow_stage !== from_stage) {
+    try {
+      const { message } = await moveProjectToStage(
+        adminSupabase,
+        id,
+        from_stage ?? null,
+        workflow_stage,
+        null,
+      );
+
+      const { data } = await adminSupabase
+        .from("projects")
+        .select(`
+          id, title, event_date, event_type, workflow_stage,
+          budget, location, notes, created_at, updated_at,
+          contact:contacts ( id, first_name, last_name, email, phone )
+        `)
+        .eq("id", id)
+        .single();
+
+      return NextResponse.json({ project: data, message });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Stage update failed";
+      console.error("[PATCH /api/projects/:id] stage move:", msg);
+      return NextResponse.json({ error: msg }, { status: 500 });
+    }
+  }
+
+  const { data } = await adminSupabase
     .from("projects")
-    .update(updateFields)
+    .select(`
+      id, title, event_date, event_type, workflow_stage,
+      budget, location, notes, created_at, updated_at,
+      contact:contacts ( id, first_name, last_name, email, phone )
+    `)
     .eq("id", id)
-    .select("*")
     .single();
-
-  if (error) {
-    console.error("[PATCH /api/projects/:id]", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  // Record workflow event when stage changes
-  if (workflow_stage && from_stage !== workflow_stage) {
-    await adminSupabase.from("workflow_events").insert([{
-      project_id: id,
-      from_stage: from_stage ?? null,
-      to_stage:   workflow_stage,
-    }]);
-  }
 
   return NextResponse.json({ project: data });
 }

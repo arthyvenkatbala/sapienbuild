@@ -1,6 +1,7 @@
 import "./globals.css";
 import SidebarNav from "@/components/layout/SidebarNav";
 import { ClientProvider } from "@/lib/client-context";
+import { ToastProvider } from "@/lib/toast";
 
 export const metadata = {
   title: "One Thousand Tales — OTT Platform",
@@ -12,12 +13,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" suppressHydrationWarning>
       <body className="bg-[#0a0a0d] text-white antialiased">
         <ClientProvider>
-          <div className="min-h-screen flex">
-            <SidebarNav />
-            <div className="flex-1 min-w-0 flex flex-col">
-              {children}
+          <ToastProvider>
+            <div className="min-h-screen flex">
+              <SidebarNav />
+              <div className="flex-1 min-w-0 flex flex-col">
+                {children}
+              </div>
             </div>
-          </div>
+          </ToastProvider>
         </ClientProvider>
       </body>
     </html>

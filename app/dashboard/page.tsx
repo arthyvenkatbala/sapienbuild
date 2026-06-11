@@ -1,53 +1,72 @@
-import { adminSupabase } from "@/lib/supabase-admin";
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Users, FolderOpen, DollarSign, Truck, ArrowRight } from "lucide-react";
 import Link from "next/link";
+import { supabase } from "@/lib/supabase";
+import { getStageLabel } from "@/lib/workflow";
 
-const STAGE_LABELS: Record<string, string> = {
-  enquiry:        "Enquiry",
-  discussion:     "Discussion",
-  quote:          "Quote",
-  negotiation:    "Negotiation",
-  booked:         "Booked",
-  execution:      "Execution",
-  feedback:       "Feedback",
-  post_production:"Post Production",
-  delivery:       "Delivery",
-};
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-async function getStats() {
-  const now   = new Date();
-  const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-
-  const [leadsRes, activeRes, revenueRes, pendingRes] = await Promise.allSettled([
-    adminSupabase.from("contacts").select("id", { count: "exact", head: true }).eq("type", "lead"),
-    adminSupabase.from("projects").select("id", { count: "exact", head: true }).neq("workflow_stage", "delivery"),
-    adminSupabase.from("invoices").select("amount").eq("status", "paid").gte("created_at", start),
-    adminSupabase.from("projects").select("id", { count: "exact", head: true }).eq("workflow_stage", "delivery"),
-  ]);
-
-  const totalLeads       = leadsRes.status === "fulfilled"   ? (leadsRes.value.count ?? 0) : 0;
-  const activeProjects   = activeRes.status === "fulfilled"  ? (activeRes.value.count ?? 0) : 0;
-  const revenue          = revenueRes.status === "fulfilled" && !revenueRes.value.error
-    ? (revenueRes.value.data ?? []).reduce((s, r) => s + Number(r.amount ?? 0), 0)
-    : 0;
-  const pendingDelivery  = pendingRes.status === "fulfilled" ? (pendingRes.value.count ?? 0) : 0;
-
-  return { totalLeads, activeProjects, revenue, pendingDelivery };
+interface DashboardStats {
+  totalLeads:     number;
+  activeProjects: number;
+  revenue:        number;
+  pendingDelivery:number;
 }
 
-async function getRecentActivity() {
-  const { data, error } = await adminSupabase
-    .from("workflow_events")
-    .select(`
-      id, from_stage, to_stage, created_at,
-      project:projects ( id, title )
-    `)
-    .order("created_at", { ascending: false })
-    .limit(10);
-
-  if (error) return [];
-  return data ?? [];
+interface ActivityEvent {
+  id: string;
+  from_stage: string | null;
+  to_stage: string;
+  created_at: string;
+  project: { id: string; title: string } | null;
 }
+
+// ─── Realtime hook ────────────────────────────────────────────────────────────
+
+function useRealtimeDashboard() {
+  const [stats,    setStats]    = useState<DashboardStats | null>(null);
+  const [activity, setActivity] = useState<ActivityEvent[]>([]);
+  const [loading,  setLoading]  = useState(true);
+
+  const fetchAll = useCallback(async () => {
+    try {
+      const res  = await fetch("/api/dashboard");
+      const data = await res.json();
+      setStats({
+        totalLeads:      data.totalLeads,
+        activeProjects:  data.activeProjects,
+        revenue:         data.revenue,
+        pendingDelivery: data.pendingDelivery,
+      });
+      setActivity(data.activity ?? []);
+    } catch (e) {
+      console.error("[dashboard] fetch:", e);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchAll();
+
+    // Subscribe to table changes — re-fetch on any mutation
+    const channel = supabase
+      .channel("ott-dashboard")
+      .on("postgres_changes", { event: "*", schema: "public", table: "contacts" },      fetchAll)
+      .on("postgres_changes", { event: "*", schema: "public", table: "projects" },      fetchAll)
+      .on("postgres_changes", { event: "*", schema: "public", table: "invoices" },      fetchAll)
+      .on("postgres_changes", { event: "*", schema: "public", table: "workflow_events" }, fetchAll)
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [fetchAll]);
+
+  return { stats, activity, loading };
+}
+
+// ─── Stat Card ────────────────────────────────────────────────────────────────
 
 function StatCard({
   label,
@@ -55,12 +74,14 @@ function StatCard({
   icon: Icon,
   color,
   href,
+  loading,
 }: {
   label: string;
   value: string | number;
   icon: typeof Users;
   color: string;
   href: string;
+  loading: boolean;
 }) {
   return (
     <Link
@@ -71,12 +92,13 @@ function StatCard({
         <div className={`w-9 h-9 rounded-xl ${color} flex items-center justify-center`}>
           <Icon size={16} className="text-white" />
         </div>
-        <ArrowRight
-          size={13}
-          className="text-zinc-700 group-hover:text-zinc-400 transition-colors mt-0.5"
-        />
+        <ArrowRight size={13} className="text-zinc-700 group-hover:text-zinc-400 transition-colors mt-0.5" />
       </div>
-      <p className="text-2xl font-bold text-white">{value}</p>
+      {loading ? (
+        <div className="h-8 w-16 bg-white/[0.05] rounded-lg animate-pulse" />
+      ) : (
+        <p className="text-2xl font-bold text-white">{value}</p>
+      )}
       <p className="text-xs text-zinc-500 mt-1">{label}</p>
     </Link>
   );
@@ -91,8 +113,10 @@ function timeAgo(date: string) {
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
-export default async function DashboardPage() {
-  const [stats, activity] = await Promise.all([getStats(), getRecentActivity()]);
+// ─── Page ─────────────────────────────────────────────────────────────────────
+
+export default function DashboardPage() {
+  const { stats, activity, loading } = useRealtimeDashboard();
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -113,31 +137,35 @@ export default async function DashboardPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
           <StatCard
             label="Total Leads"
-            value={stats.totalLeads}
+            value={stats?.totalLeads ?? 0}
             icon={Users}
             color="bg-teal-500/20"
             href="/crm/leads"
+            loading={loading}
           />
           <StatCard
             label="Active Projects"
-            value={stats.activeProjects}
+            value={stats?.activeProjects ?? 0}
             icon={FolderOpen}
             color="bg-blue-500/20"
             href="/projects"
+            loading={loading}
           />
           <StatCard
             label="Revenue This Month"
-            value={`₹${stats.revenue.toLocaleString("en-IN")}`}
+            value={stats ? `₹${stats.revenue.toLocaleString("en-IN")}` : "₹0"}
             icon={DollarSign}
             color="bg-green-500/20"
             href="/accounts"
+            loading={loading}
           />
           <StatCard
             label="Pending Deliveries"
-            value={stats.pendingDelivery}
+            value={stats?.pendingDelivery ?? 0}
             icon={Truck}
             color="bg-orange-500/20"
             href="/workflow"
+            loading={loading}
           />
         </div>
 
@@ -153,7 +181,13 @@ export default async function DashboardPage() {
             </Link>
           </div>
 
-          {activity.length === 0 ? (
+          {loading ? (
+            <div className="space-y-3">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="h-10 bg-white/[0.02] rounded-xl animate-pulse" />
+              ))}
+            </div>
+          ) : activity.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-zinc-600">
               <FolderOpen size={28} className="mb-3 opacity-30" />
               <p className="text-sm text-zinc-500">No workflow events yet</p>
@@ -170,7 +204,7 @@ export default async function DashboardPage() {
           ) : (
             <div className="space-y-0">
               {activity.map((event, i) => {
-                const project = event.project as unknown as { id: string; title: string } | null;
+                const project = event.project as { id: string; title: string } | null;
                 return (
                   <div
                     key={event.id}
@@ -180,13 +214,20 @@ export default async function DashboardPage() {
                   >
                     <div className="w-1.5 h-1.5 rounded-full bg-orange-400 shrink-0" />
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm text-white truncate">
-                        {project?.title ?? "Unknown project"}
-                      </p>
+                      {project ? (
+                        <Link
+                          href={`/projects/${project.id}`}
+                          className="text-sm text-white hover:text-blue-300 transition-colors truncate block"
+                        >
+                          {project.title}
+                        </Link>
+                      ) : (
+                        <p className="text-sm text-white truncate">Unknown project</p>
+                      )}
                       <p className="text-xs text-zinc-500">
                         {event.from_stage
-                          ? `${STAGE_LABELS[event.from_stage] ?? event.from_stage} → ${STAGE_LABELS[event.to_stage] ?? event.to_stage}`
-                          : `Moved to ${STAGE_LABELS[event.to_stage] ?? event.to_stage}`}
+                          ? `${getStageLabel(event.from_stage)} → ${getStageLabel(event.to_stage)}`
+                          : `Moved to ${getStageLabel(event.to_stage)}`}
                       </p>
                     </div>
                     <span className="text-[11px] text-zinc-600 shrink-0">
@@ -198,7 +239,6 @@ export default async function DashboardPage() {
             </div>
           )}
         </div>
-
       </main>
     </div>
   );

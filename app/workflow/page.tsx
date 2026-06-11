@@ -16,6 +16,7 @@ import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { Plus, Calendar, User, GitBranch } from "lucide-react";
 import Link from "next/link";
+import { useToast } from "@/lib/toast";
 
 type WorkflowStage =
   | "enquiry"
@@ -29,15 +30,15 @@ type WorkflowStage =
   | "delivery";
 
 const STAGES: { id: WorkflowStage; label: string; color: string }[] = [
-  { id: "enquiry",        label: "Enquiry",         color: "bg-zinc-500/20 border-zinc-500/30 text-zinc-400" },
-  { id: "discussion",     label: "Discussion",      color: "bg-purple-500/20 border-purple-500/30 text-purple-400" },
-  { id: "quote",          label: "Quote",           color: "bg-yellow-500/20 border-yellow-500/30 text-yellow-400" },
-  { id: "negotiation",    label: "Negotiation",     color: "bg-orange-500/20 border-orange-500/30 text-orange-400" },
-  { id: "booked",         label: "Booked",          color: "bg-teal-500/20 border-teal-500/30 text-teal-400" },
-  { id: "execution",      label: "Execution",       color: "bg-blue-500/20 border-blue-500/30 text-blue-400" },
-  { id: "feedback",       label: "Feedback",        color: "bg-pink-500/20 border-pink-500/30 text-pink-400" },
-  { id: "post_production",label: "Post Production", color: "bg-indigo-500/20 border-indigo-500/30 text-indigo-400" },
-  { id: "delivery",       label: "Delivery",        color: "bg-green-500/20 border-green-500/30 text-green-400" },
+  { id: "enquiry",         label: "Enquiry",         color: "bg-zinc-500/20 border-zinc-500/30 text-zinc-400" },
+  { id: "discussion",      label: "Discussion",      color: "bg-purple-500/20 border-purple-500/30 text-purple-400" },
+  { id: "quote",           label: "Quote",           color: "bg-yellow-500/20 border-yellow-500/30 text-yellow-400" },
+  { id: "negotiation",     label: "Negotiation",     color: "bg-orange-500/20 border-orange-500/30 text-orange-400" },
+  { id: "booked",          label: "Booked",          color: "bg-teal-500/20 border-teal-500/30 text-teal-400" },
+  { id: "execution",       label: "Execution",       color: "bg-blue-500/20 border-blue-500/30 text-blue-400" },
+  { id: "feedback",        label: "Feedback",        color: "bg-pink-500/20 border-pink-500/30 text-pink-400" },
+  { id: "post_production", label: "Post Production", color: "bg-indigo-500/20 border-indigo-500/30 text-indigo-400" },
+  { id: "delivery",        label: "Delivery",        color: "bg-green-500/20 border-green-500/30 text-green-400" },
 ];
 
 interface Project {
@@ -57,8 +58,10 @@ function ProjectCard({
   isDragging?: boolean;
 }) {
   return (
-    <div
-      className={`bg-[#111114] border rounded-xl p-3 space-y-2 transition-all ${
+    <Link
+      href={`/projects/${project.id}`}
+      onClick={(e) => isDragging && e.preventDefault()}
+      className={`block bg-[#111114] border rounded-xl p-3 space-y-2 transition-all ${
         isDragging
           ? "border-orange-500/40 shadow-2xl shadow-orange-500/10 opacity-90 scale-105"
           : "border-white/[0.07] hover:border-white/[0.14]"
@@ -77,7 +80,9 @@ function ProjectCard({
         <div className="flex items-center gap-1 text-zinc-500">
           <Calendar size={10} />
           <span className="text-[10px]">
-            {new Date(project.event_date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+            {new Date(project.event_date).toLocaleDateString("en-IN", {
+              day: "numeric", month: "short", year: "numeric",
+            })}
           </span>
         </div>
       )}
@@ -86,7 +91,7 @@ function ProjectCard({
           {project.event_type}
         </span>
       )}
-    </div>
+    </Link>
   );
 }
 
@@ -98,8 +103,8 @@ function DraggableCard({ project }: { project: Project }) {
 
   const style = {
     transform: CSS.Translate.toString(transform),
-    opacity: isDragging ? 0.4 : 1,
-    cursor: isDragging ? "grabbing" : "grab",
+    opacity:   isDragging ? 0.4 : 1,
+    cursor:    isDragging ? "grabbing" : "grab",
   };
 
   return (
@@ -120,13 +125,10 @@ function DroppableColumn({
 
   return (
     <div className="flex-shrink-0 w-52">
-      {/* Column header */}
       <div className={`flex items-center justify-between mb-2 px-2 py-1.5 rounded-lg border ${stage.color}`}>
         <span className="text-[10px] font-bold uppercase tracking-wider">{stage.label}</span>
         <span className="text-[10px] font-semibold opacity-60">{projects.length}</span>
       </div>
-
-      {/* Drop zone */}
       <div
         ref={setNodeRef}
         className={`min-h-[120px] rounded-xl p-2 space-y-2 transition-all border ${
@@ -138,7 +140,6 @@ function DroppableColumn({
         {projects.map((p) => (
           <DraggableCard key={p.id} project={p} />
         ))}
-
         {projects.length === 0 && (
           <div className="flex items-center justify-center h-14 text-zinc-700 text-[10px]">
             Drop here
@@ -153,6 +154,7 @@ export default function WorkflowPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading,  setLoading]  = useState(true);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const toast = useToast();
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
@@ -197,16 +199,19 @@ export default function WorkflowPage() {
     );
 
     try {
-      await fetch(`/api/projects/${projectId}`, {
+      const res = await fetch(`/api/projects/${projectId}`, {
         method:  "PATCH",
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({ workflow_stage: newStage, from_stage: oldStage }),
       });
+      const data = await res.json();
+      if (data.message) toast(data.message);
     } catch {
       // Roll back on error
       setProjects((prev) =>
         prev.map((p) => (p.id === projectId ? { ...p, workflow_stage: oldStage } : p))
       );
+      toast("Failed to update stage — changes reverted", "error");
     }
   };
 
