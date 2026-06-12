@@ -67,9 +67,8 @@ export async function POST(request: NextRequest) {
     // 5. Target ONLY page 4 (index 3) — never touch other pages
     const page = pdfDoc.getPage(3);
 
-    const white = rgb(1,     1,     1);     // white fill for rectangles
-    const dark  = rgb(0.102, 0.102, 0.102); // #1a1a1a
-    const grey  = rgb(0.4,   0.4,   0.4);   // #666666
+    const dark = rgb(0.102, 0.102, 0.102); // #1a1a1a — matches template body text
+    const grey = rgb(0.4,   0.4,   0.4);   // #666666 — for service notes
 
     function drawAt(
       text: string,
@@ -83,9 +82,7 @@ export async function POST(request: NextRequest) {
       page.drawText(text, { x, y, font, size, color });
     }
 
-    
-
-    // ── Step 3: Write dynamic content on clean areas ─────────────────────────
+    // ── Write dynamic content into the template's blank areas ────────────────
 
     // CLIENT NAME
     const contact  = invoice.contact as { first_name?: string; last_name?: string } | null;
@@ -120,27 +117,31 @@ export async function POST(request: NextRequest) {
     let cy = 620;
 
     for (const item of selected) {
-      if (cy < 220) break; // safety: don't overflow into total area
+      if (cy < 490) break; // stop before the template paragraph text
 
-      // Service name — left column
+      // Service name — left
       drawAt(item.name, 45, cy, boldFont, 10);
 
       // Note below name (grey, smaller)
-      if (item.note?.trim()) {
-        drawAt(item.note.trim(), 45, cy - 13, regFont, 9, grey);
+      const hasNote = !!item.note?.trim();
+      if (hasNote) {
+        drawAt(item.note.trim(), 45, cy - 11, regFont, 9, grey);
       }
 
-      // Sessions / events — right column
+      // Calculated line amount — right-aligned
       const sessions = parseInt(item.events) || 1;
-      const evText   = sessions > 1 ? `Sessions - ${sessions}` : "Events - 1";
-      drawAt(evText, 430, cy, regFont, 10);
+      const lineAmt  = item.price * sessions;
+      const amtText  = `INR ${inrNumber(lineAmt)}`;
+      const amtWidth = boldFont.widthOfTextAtSize(amtText, 10);
+      drawAt(amtText, 530 - amtWidth, cy, boldFont, 10);
 
-      cy -= 38;
+      cy -= hasNote ? 28 : 18;
     }
 
     // ── TOTAL COST ───────────────────────────────────────────────────────────
-    const total = Number(invoice.amount) || 0;
-    drawAt(inrNumber(total), 220, 158, boldFont, 13);
+    const total     = Number(invoice.amount) || 0;
+    const totalText = `Total cost = INR ${inrNumber(total)}`;
+    drawAt(totalText, 45, 158, boldFont, 13);
 
     // 6. Serialise
     const pdfBytes = await pdfDoc.save();

@@ -79,5 +79,17 @@ export async function PATCH(
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  // When a quote is sent or paid, promote the linked contact from lead → client
+  if (update.status === "sent" || update.status === "paid") {
+    const contactId = (data?.contact as { id?: string } | null)?.id;
+    if (contactId) {
+      await adminSupabase
+        .from("contacts")
+        .update({ type: "client" })
+        .eq("id", contactId)
+        .eq("type", "lead");
+    }
+  }
+
   return NextResponse.json({ invoice: data });
 }

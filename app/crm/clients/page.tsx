@@ -1,233 +1,194 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import {
-  Plus, Search, X, Users, CheckCircle,
-  Building2, Phone, Mail, ExternalLink, Trash2, Globe, FolderOpen,
-} from "lucide-react";
+import { Search, X, Users, Mail, Phone, Calendar, Tag, FolderOpen } from "lucide-react";
 import Link from "next/link";
-import type { Client } from "@/lib/clients-types";
 
-interface ClientWithProjects extends Client {
-  project_count?: number;
-}
+// ─── Stage display ────────────────────────────────────────────────────────────
 
-function CreateClientModal({
-  onClose,
-  onCreate,
-}: { onClose: () => void; onCreate: (c: Client) => void }) {
-  const [form, setForm] = useState({ business_name: "", owner_name: "", email: "", phone: "", website_url: "" });
-  const [saving, setSaving] = useState(false);
-  const [error,  setError]  = useState("");
+const STAGE_LABELS: Record<string, string> = {
+  enquiry:         "Enquiry",
+  discussion:      "Discussion",
+  quote:           "Quote",
+  negotiation:     "Negotiation",
+  booked:          "Booked",
+  execution:       "Execution",
+  feedback:        "Feedback",
+  post_production: "Post Production",
+  delivery:        "Delivery",
+};
 
-  const handle = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!form.business_name.trim()) { setError("Business name is required"); return; }
-    setSaving(true);
-    try {
-      const res = await fetch("/api/clients", {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify(form),
-      });
-      const data = await res.json();
-      if (!res.ok) { setError(data.error ?? "Failed to create client"); return; }
-      onCreate(data.client);
-      onClose();
-    } catch {
-      setError("Network error — please try again");
-    } finally {
-      setSaving(false);
-    }
-  };
+const STAGE_COLORS: Record<string, string> = {
+  enquiry:         "bg-zinc-500/20 text-zinc-400 border-zinc-500/30",
+  discussion:      "bg-purple-500/20 text-purple-400 border-purple-500/30",
+  quote:           "bg-amber-500/20 text-amber-400 border-amber-500/30",
+  negotiation:     "bg-orange-500/20 text-orange-400 border-orange-500/30",
+  booked:          "bg-green-500/20 text-green-400 border-green-500/30",
+  execution:       "bg-blue-500/20 text-blue-400 border-blue-500/30",
+  feedback:        "bg-pink-500/20 text-pink-400 border-pink-500/30",
+  post_production: "bg-teal-500/20 text-teal-400 border-teal-500/30",
+  delivery:        "bg-yellow-500/20 text-yellow-400 border-yellow-500/30",
+};
 
-  const inputCls =
-    "w-full bg-[#0d0d10] border border-white/[0.08] rounded-xl px-3 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-600 outline-none focus:border-teal-500/40 transition-all";
+// ─── Source badge ─────────────────────────────────────────────────────────────
 
+const SOURCE_BADGE: Record<string, { label: string; cls: string }> = {
+  meta_ads:  { label: "Meta Ad",   cls: "bg-blue-500/20 border-blue-500/30 text-blue-300" },
+  instagram: { label: "Instagram", cls: "bg-pink-500/20 border-pink-500/30 text-pink-300" },
+  referral:  { label: "Referral",  cls: "bg-green-500/20 border-green-500/30 text-green-300" },
+  website:   { label: "Website",   cls: "bg-zinc-500/20 border-zinc-500/30 text-zinc-400" },
+  "walk-in": { label: "Walk-in",   cls: "bg-amber-500/20 border-amber-500/30 text-amber-300" },
+  google:    { label: "Google",    cls: "bg-yellow-500/20 border-yellow-500/30 text-yellow-300" },
+  manual:    { label: "Manual",    cls: "bg-zinc-500/20 border-zinc-500/30 text-zinc-500" },
+};
+
+function SourceBadge({ source }: { source: string | null }) {
+  if (!source) return <span className="text-zinc-700 text-[11px]">—</span>;
+  const cfg = SOURCE_BADGE[source];
+  if (!cfg) {
+    return (
+      <span className="text-[9px] px-2 py-0.5 rounded-full bg-white/[0.04] border border-white/[0.07] text-zinc-500 shrink-0 capitalize">
+        {source}
+      </span>
+    );
+  }
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: "rgba(0,0,0,0.8)", backdropFilter: "blur(8px)" }}
-    >
-      <motion.div
-        initial={{ opacity: 0, scale: 0.96, y: 12 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.96 }}
-        transition={{ type: "spring", damping: 28, stiffness: 300 }}
-        className="bg-[#111114] border border-white/[0.08] rounded-2xl w-full max-w-md shadow-2xl"
-      >
-        <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.07]">
-          <h2 className="text-sm font-semibold text-white">New Client</h2>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/[0.06] text-zinc-500 hover:text-white transition-all">
-            <X size={15} />
-          </button>
-        </div>
-
-        <form onSubmit={handle} className="p-6 space-y-4">
-          {error && (
-            <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2">
-              {error}
-            </p>
-          )}
-
-          {[
-            { key: "business_name", label: "Business Name *",       placeholder: "OTT Photography Studio" },
-            { key: "owner_name",    label: "Owner / Contact Name",   placeholder: "Dilip Kumar" },
-            { key: "email",         label: "Email",                  placeholder: "client@email.com" },
-            { key: "phone",         label: "Phone",                  placeholder: "+91 98765 43210" },
-            { key: "website_url",   label: "Website URL",            placeholder: "https://www.example.com" },
-          ].map(({ key, label, placeholder }) => (
-            <div key={key} className="space-y-1.5">
-              <label className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">{label}</label>
-              <input
-                className={inputCls}
-                placeholder={placeholder}
-                value={form[key as keyof typeof form]}
-                onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
-              />
-            </div>
-          ))}
-
-          <div className="flex gap-3 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 py-2.5 rounded-xl border border-white/[0.07] text-sm text-zinc-500 hover:text-white hover:border-white/[0.15] transition-all"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="flex-1 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-500 disabled:opacity-50 text-sm font-medium text-white transition-all"
-            >
-              {saving ? "Creating…" : "Create Client"}
-            </button>
-          </div>
-        </form>
-      </motion.div>
-    </motion.div>
+    <span className={`text-[9px] font-semibold px-2 py-0.5 rounded-full border shrink-0 ${cfg.cls}`}>
+      {cfg.label}
+    </span>
   );
 }
 
-function ClientCard({ client, onDelete }: { client: ClientWithProjects; onDelete: (id: string) => void }) {
-  const [deleting, setDeleting] = useState(false);
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-  const handleDelete = async (e: React.MouseEvent) => {
-    e.preventDefault();
-    if (!confirm(`Delete ${client.business_name}?`)) return;
-    setDeleting(true);
-    await fetch(`/api/clients/${client.id}`, { method: "DELETE" });
-    onDelete(client.id);
-  };
+interface ContactProject {
+  id: string;
+  title: string;
+  event_type: string | null;
+  event_date: string | null;
+  workflow_stage: string;
+  created_at: string;
+}
 
-  const initials = (client.business_name || "?")
-    .split(" ")
-    .slice(0, 2)
-    .map((w) => w[0])
-    .join("")
-    .toUpperCase();
+interface Client {
+  id: string;
+  first_name: string;
+  last_name: string;
+  email: string | null;
+  phone: string | null;
+  source: string | null;
+  created_at: string;
+  projects?: ContactProject[];
+}
+
+function latestProject(client: Client): ContactProject | null {
+  if (!client.projects?.length) return null;
+  return [...client.projects].sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+  )[0];
+}
+
+// ─── Client Row ───────────────────────────────────────────────────────────────
+
+function ClientRow({ client }: { client: Client }) {
+  const proj = latestProject(client);
 
   return (
-    <Link href={`/clients/${client.id}`} className="block group">
-      <div className="bg-[#111114] border border-white/[0.07] rounded-2xl p-5 hover:border-teal-500/30 transition-all relative overflow-hidden">
-        <div className="flex items-start justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-teal-500/30 to-cyan-500/30 border border-teal-500/20 flex items-center justify-center text-sm font-bold text-teal-300 shrink-0">
-              {initials}
-            </div>
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-white truncate">{client.business_name}</p>
-              {client.owner_name && (
-                <p className="text-[11px] text-zinc-500 mt-0.5">{client.owner_name}</p>
-              )}
-            </div>
-          </div>
-          <button
-            onClick={handleDelete}
-            disabled={deleting}
-            title="Delete client"
-            className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-red-500/10 text-zinc-600 hover:text-red-400 transition-all"
-          >
-            <Trash2 size={12} />
-          </button>
-        </div>
+    <div className="flex items-center gap-3 px-5 py-3.5 border-b border-white/[0.04] hover:bg-white/[0.02] transition-colors">
+      {/* Avatar */}
+      <div className="w-8 h-8 rounded-lg bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center text-xs font-bold text-emerald-300 shrink-0">
+        {(client.first_name[0] ?? "?").toUpperCase()}
+      </div>
 
-        <div className="space-y-1.5 mb-4">
+      {/* Name + contact */}
+      <div className="w-44 min-w-0 shrink-0">
+        <p className="text-sm text-white font-medium truncate">
+          {client.first_name} {client.last_name}
+        </p>
+        <div className="flex flex-col gap-0.5 mt-0.5">
           {client.email && (
-            <div className="flex items-center gap-2 text-zinc-500">
-              <Mail size={11} />
-              <span className="text-[11px] truncate">{client.email}</span>
-            </div>
+            <span className="flex items-center gap-1 text-[10px] text-zinc-500 truncate">
+              <Mail size={9} /> {client.email}
+            </span>
           )}
           {client.phone && (
-            <div className="flex items-center gap-2 text-zinc-500">
-              <Phone size={11} />
-              <span className="text-[11px]">{client.phone}</span>
-            </div>
-          )}
-          {client.website_url && (
-            <div className="flex items-center gap-2 text-zinc-500">
-              <Globe size={11} />
-              <span className="text-[11px] truncate">{client.website_url.replace(/^https?:\/\//, "")}</span>
-            </div>
-          )}
-        </div>
-
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            {client.connected_platforms.includes("meta") ? (
-              <span className="inline-flex items-center gap-1 text-[9px] font-semibold px-2 py-0.5 rounded-full bg-blue-500/15 border border-blue-500/25 text-blue-400">
-                <CheckCircle size={8} /> Meta
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1 text-[9px] px-2 py-0.5 rounded-full border border-white/[0.06] text-zinc-600">
-                Meta
-              </span>
-            )}
-            {client.connected_platforms.includes("google") ? (
-              <span className="inline-flex items-center gap-1 text-[9px] font-semibold px-2 py-0.5 rounded-full bg-green-500/15 border border-green-500/25 text-green-400">
-                <CheckCircle size={8} /> Google
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1 text-[9px] px-2 py-0.5 rounded-full border border-white/[0.06] text-zinc-600">
-                Google
-              </span>
-            )}
-          </div>
-          {typeof client.project_count === "number" && (
-            <span className="flex items-center gap-1 text-[10px] text-zinc-600">
-              <FolderOpen size={10} />
-              {client.project_count} project{client.project_count !== 1 ? "s" : ""}
+            <span className="flex items-center gap-1 text-[10px] text-zinc-500">
+              <Phone size={9} /> {client.phone}
             </span>
           )}
         </div>
-
-        <ExternalLink
-          size={12}
-          className="absolute bottom-5 right-5 text-zinc-700 opacity-0 group-hover:opacity-100 transition-all"
-        />
       </div>
-    </Link>
+
+      {/* Project title */}
+      <div className="flex-1 min-w-0 hidden lg:block">
+        {proj ? (
+          <Link href={`/workflow/${proj.id}`} className="text-[11px] text-zinc-400 hover:text-teal-300 transition-colors truncate block">
+            <FolderOpen size={10} className="inline mr-1 text-zinc-600" />
+            {proj.title}
+          </Link>
+        ) : (
+          <span className="text-[11px] text-zinc-700">—</span>
+        )}
+      </div>
+
+      {/* Event type */}
+      <div className="w-28 shrink-0 hidden md:flex items-center gap-1.5">
+        {proj?.event_type ? (
+          <span className="flex items-center gap-1 text-[11px] text-zinc-400 capitalize">
+            <Tag size={10} className="text-zinc-600" />
+            {proj.event_type}
+          </span>
+        ) : (
+          <span className="text-[11px] text-zinc-700">—</span>
+        )}
+      </div>
+
+      {/* Event date */}
+      <div className="w-28 shrink-0 hidden md:flex items-center gap-1.5">
+        {proj?.event_date ? (
+          <span className="flex items-center gap-1 text-[11px] text-zinc-400">
+            <Calendar size={10} className="text-zinc-600" />
+            {new Date(proj.event_date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+          </span>
+        ) : (
+          <span className="text-[11px] text-zinc-700">—</span>
+        )}
+      </div>
+
+      {/* Project stage */}
+      <div className="w-28 shrink-0">
+        {proj ? (
+          <span className={`inline-flex text-[9px] font-semibold px-2 py-0.5 rounded-full border ${
+            STAGE_COLORS[proj.workflow_stage] ?? "bg-zinc-500/20 text-zinc-400 border-zinc-500/30"
+          }`}>
+            {STAGE_LABELS[proj.workflow_stage] ?? proj.workflow_stage}
+          </span>
+        ) : (
+          <span className="text-[11px] text-zinc-700">No project</span>
+        )}
+      </div>
+
+      {/* Source */}
+      <div className="w-20 shrink-0 hidden sm:block">
+        <SourceBadge source={client.source} />
+      </div>
+    </div>
   );
 }
 
+// ─── Page ─────────────────────────────────────────────────────────────────────
+
 export default function CrmClientsPage() {
-  const [clients, setClients]       = useState<ClientWithProjects[]>([]);
-  const [loading, setLoading]       = useState(true);
-  const [search,  setSearch]        = useState("");
-  const [showCreate, setShowCreate] = useState(false);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search,  setSearch]  = useState("");
 
   const fetchClients = useCallback(async () => {
     setLoading(true);
     try {
-      const res  = await fetch("/api/clients");
+      const res  = await fetch("/api/contacts?type=client&with_project=true");
       const data = await res.json();
-      setClients(data.clients ?? []);
+      setClients(data.contacts ?? []);
     } catch (e) {
       console.error(e);
     } finally {
@@ -239,10 +200,12 @@ export default function CrmClientsPage() {
 
   const filtered = clients.filter((c) => {
     const q = search.toLowerCase();
-    return !q
-      || c.business_name.toLowerCase().includes(q)
-      || c.owner_name.toLowerCase().includes(q)
-      || c.email.toLowerCase().includes(q);
+    return (
+      !q ||
+      `${c.first_name} ${c.last_name}`.toLowerCase().includes(q) ||
+      (c.email ?? "").toLowerCase().includes(q) ||
+      (c.phone ?? "").includes(q)
+    );
   });
 
   return (
@@ -251,18 +214,12 @@ export default function CrmClientsPage() {
         <div>
           <h1 className="text-base font-semibold text-white">Clients</h1>
           <p className="text-xs text-zinc-500">
-            {clients.length} client{clients.length !== 1 ? "s" : ""} · ad accounts & platform connections
+            {clients.length} client{clients.length !== 1 ? "s" : ""} · photography clients
           </p>
         </div>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="flex items-center gap-1.5 text-xs text-white bg-teal-600 hover:bg-teal-500 px-4 py-1.5 rounded-xl transition-all font-medium"
-        >
-          <Plus size={12} /> Add Client
-        </button>
       </header>
 
-      <main className="flex-1 px-6 md:px-8 py-8 max-w-[1600px] w-full mx-auto space-y-6">
+      <main className="flex-1 px-6 md:px-8 py-6 max-w-[1400px] w-full mx-auto space-y-4">
         <div className="relative max-w-sm">
           <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
           <input
@@ -278,58 +235,41 @@ export default function CrmClientsPage() {
           )}
         </div>
 
-        {loading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="bg-[#111114] border border-white/[0.05] rounded-2xl h-44 animate-pulse" />
-            ))}
+        <div className="bg-[#111114] border border-white/[0.07] rounded-2xl overflow-hidden">
+          {/* Table header */}
+          <div className="flex items-center gap-3 px-5 py-3 border-b border-white/[0.07] bg-white/[0.02]">
+            <div className="w-8 shrink-0" />
+            <p className="w-44 shrink-0 text-[10px] font-semibold uppercase tracking-widest text-zinc-600">Name</p>
+            <p className="flex-1 hidden lg:block text-[10px] font-semibold uppercase tracking-widest text-zinc-600">Project</p>
+            <p className="w-28 shrink-0 hidden md:block text-[10px] font-semibold uppercase tracking-widest text-zinc-600">Event</p>
+            <p className="w-28 shrink-0 hidden md:block text-[10px] font-semibold uppercase tracking-widest text-zinc-600">Date</p>
+            <p className="w-28 shrink-0 text-[10px] font-semibold uppercase tracking-widest text-zinc-600">Stage</p>
+            <p className="w-20 shrink-0 hidden sm:block text-[10px] font-semibold uppercase tracking-widest text-zinc-600">Source</p>
           </div>
-        ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-24 text-zinc-600">
-            <Users size={32} className="mb-4 opacity-30" />
-            <p className="text-sm font-medium text-zinc-500 mb-1">
-              {search ? "No clients match your search" : "No clients yet"}
-            </p>
-            {!search && (
-              <button
-                onClick={() => setShowCreate(true)}
-                className="mt-4 flex items-center gap-2 text-sm text-white bg-teal-600 hover:bg-teal-500 px-5 py-2.5 rounded-xl transition-all font-medium"
-              >
-                <Plus size={14} /> Add your first client
-              </button>
-            )}
-          </div>
-        ) : (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"
-          >
-            {filtered.map((client, i) => (
-              <motion.div
-                key={client.id}
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.04 }}
-              >
-                <ClientCard
-                  client={client}
-                  onDelete={(id) => setClients((prev) => prev.filter((c) => c.id !== id))}
-                />
-              </motion.div>
-            ))}
-          </motion.div>
-        )}
-      </main>
 
-      <AnimatePresence>
-        {showCreate && (
-          <CreateClientModal
-            onClose={() => setShowCreate(false)}
-            onCreate={(c) => setClients((prev) => [c, ...prev])}
-          />
-        )}
-      </AnimatePresence>
+          {loading ? (
+            <div className="space-y-px">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="h-14 bg-white/[0.01] animate-pulse border-b border-white/[0.03]" />
+              ))}
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-zinc-600">
+              <Users size={28} className="mb-3 opacity-30" />
+              <p className="text-sm text-zinc-500">
+                {search ? "No clients match your search" : "No clients yet"}
+              </p>
+              {!search && (
+                <p className="text-xs text-zinc-700 mt-2">
+                  Clients appear here automatically when a quote is marked as sent.
+                </p>
+              )}
+            </div>
+          ) : (
+            filtered.map((c) => <ClientRow key={c.id} client={c} />)
+          )}
+        </div>
+      </main>
     </div>
   );
 }

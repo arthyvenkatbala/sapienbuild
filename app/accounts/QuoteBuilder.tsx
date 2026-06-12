@@ -102,7 +102,6 @@ export function QuoteBuilder({ invoiceId, projectId, onClose, onSave }: QuoteBui
   const [lineItems, setLineItems] = useState<LineItemState[]>(defaultItems);
 
   // ── Section C ──────────────────────────────────────────────────────────────
-  const [discountType,  setDiscountType]  = useState<"none" | "fixed" | "percentage">("none");
   const [discountValue, setDiscountValue] = useState(0);
   const [discountNote,  setDiscountNote]  = useState("");
 
@@ -119,13 +118,7 @@ export function QuoteBuilder({ invoiceId, projectId, onClose, onSave }: QuoteBui
     .filter((i) => i.selected)
     .reduce((s, i) => s + i.price * (parseInt(i.events) || 1), 0);
 
-  const discountAmount =
-    discountType === "fixed"
-      ? Math.min(discountValue, subtotal)
-      : discountType === "percentage"
-        ? Math.round((subtotal * discountValue) / 100)
-        : 0;
-
+  const discountAmount = Math.min(discountValue, subtotal);
   const total = Math.max(0, subtotal - discountAmount);
 
   const eventsList = eventNames.map((e, i) => `(${i + 1}) ${e}`).join("  ");
@@ -174,9 +167,6 @@ export function QuoteBuilder({ invoiceId, projectId, onClose, onSave }: QuoteBui
           }
         }
 
-        if (inv.discount_type && inv.discount_type !== "none") {
-          setDiscountType(inv.discount_type as "fixed" | "percentage");
-        }
         if (inv.discount_value) setDiscountValue(Number(inv.discount_value));
         if (inv.discount_note)  setDiscountNote(inv.discount_note);
 
@@ -238,9 +228,10 @@ export function QuoteBuilder({ invoiceId, projectId, onClose, onSave }: QuoteBui
           event_dates:    eventDates,
           events_list:    eventsList,
           line_items:     lineItems,
-          discount_type:  discountType,
+          discount_type:  discountValue > 0 ? "fixed" : "none",
           discount_value: discountValue,
           discount_note:  discountNote,
+          pdf_data:       null, // clear cached PDF so next download regenerates
         }),
       });
       if (!res.ok) {
@@ -492,43 +483,25 @@ export function QuoteBuilder({ invoiceId, projectId, onClose, onSave }: QuoteBui
               {/* ─── Section C — Discount ────────────────────────────────── */}
               <section>
                 <SectionHead letter="C" title="Discount" />
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <label className={labelCls}>Type</label>
-                    <select
+                    <label className={labelCls}>Flat Discount (₹)</label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
                       className={inputCls}
-                      value={discountType}
-                      onChange={(e) =>
-                        setDiscountType(e.target.value as "none" | "fixed" | "percentage")
-                      }
-                    >
-                      <option value="none">None</option>
-                      <option value="fixed">Fixed Amount</option>
-                      <option value="percentage">Percentage</option>
-                    </select>
+                      value={discountValue || ""}
+                      onChange={(e) => setDiscountValue(Number(e.target.value.replace(/[^\d]/g, "")) || 0)}
+                      placeholder="0"
+                    />
                   </div>
-                  {discountType !== "none" && (
-                    <div className="space-y-1.5">
-                      <label className={labelCls}>
-                        {discountType === "percentage" ? "Percentage (%)" : "Amount (₹)"}
-                      </label>
-                      <input
-                        type="number"
-                        className={inputCls}
-                        value={discountValue || ""}
-                        onChange={(e) => setDiscountValue(Number(e.target.value) || 0)}
-                        placeholder={discountType === "percentage" ? "10" : "5000"}
-                        min={0}
-                      />
-                    </div>
-                  )}
                   <div className="space-y-1.5">
-                    <label className={labelCls}>Note</label>
+                    <label className={labelCls}>Discount Note</label>
                     <input
                       className={inputCls}
                       value={discountNote}
                       onChange={(e) => setDiscountNote(e.target.value)}
-                      placeholder="Loyalty discount"
+                      placeholder="e.g. Loyalty discount"
                     />
                   </div>
                 </div>
@@ -562,7 +535,6 @@ export function QuoteBuilder({ invoiceId, projectId, onClose, onSave }: QuoteBui
                             <span className="text-zinc-500">
                               Discount
                               {discountNote ? ` (${discountNote})` : ""}
-                              {discountType === "percentage" ? ` — ${discountValue}%` : ""}
                             </span>
                             <span className="text-red-400 tabular-nums">
                               −{inr(discountAmount)}

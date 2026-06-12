@@ -2,11 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminSupabase } from "@/lib/supabase-admin";
 
 export async function GET(request: NextRequest) {
-  const type = request.nextUrl.searchParams.get("type");
+  const type        = request.nextUrl.searchParams.get("type");
+  const withProject = request.nextUrl.searchParams.get("with_project") === "true";
+
+  const selectStr = withProject
+    ? `*, projects ( id, title, event_type, event_date, workflow_stage, created_at )`
+    : "*";
 
   let query = adminSupabase
     .from("contacts")
-    .select("*")
+    .select(selectStr)
     .order("created_at", { ascending: false });
 
   if (type) query = query.eq("type", type);
