@@ -15,6 +15,7 @@ import {
   Menu,
   X,
   Globe,
+  BarChart2,
   type LucideIcon,
 } from "lucide-react";
 
@@ -82,18 +83,26 @@ const NAV: NavItem[] = [
       { label: "Settings", href: "/social/settings" },
     ],
   },
+  {
+    label: "Marketing",
+    href: "/marketing",
+    icon: BarChart2,
+    activeColor: "text-sky-400",
+  },
 ];
 
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
-    "/crm":    pathname.startsWith("/crm"),
-    "/social": pathname.startsWith("/social"),
+    "/crm":       pathname.startsWith("/crm"),
+    "/social":    pathname.startsWith("/social"),
+    "/marketing": pathname.startsWith("/marketing"),
   });
 
   useEffect(() => {
-    if (pathname.startsWith("/crm"))    setOpenSections((s) => ({ ...s, "/crm": true }));
-    if (pathname.startsWith("/social")) setOpenSections((s) => ({ ...s, "/social": true }));
+    if (pathname.startsWith("/crm"))       setOpenSections((s) => ({ ...s, "/crm": true }));
+    if (pathname.startsWith("/social"))    setOpenSections((s) => ({ ...s, "/social": true }));
+    if (pathname.startsWith("/marketing")) setOpenSections((s) => ({ ...s, "/marketing": true }));
   }, [pathname]);
 
   const toggleSection = (href: string) => {
