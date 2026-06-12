@@ -16,6 +16,7 @@ import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { Plus, Calendar, User, GitBranch } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useToast } from "@/lib/toast";
 
 type WorkflowStage =
@@ -154,7 +155,8 @@ export default function WorkflowPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading,  setLoading]  = useState(true);
   const [activeId, setActiveId] = useState<string | null>(null);
-  const toast = useToast();
+  const toast  = useToast();
+  const router = useRouter();
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
@@ -206,6 +208,7 @@ export default function WorkflowPage() {
       });
       const data = await res.json();
       if (data.message) toast(data.message);
+      if (data.redirect_to) router.push(data.redirect_to);
     } catch {
       // Roll back on error
       setProjects((prev) =>

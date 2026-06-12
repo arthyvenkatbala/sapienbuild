@@ -77,7 +77,7 @@ export async function moveProjectToStage(
   toStage: string,
   userId?: string | null,
   notes?: string,
-): Promise<{ message: string }> {
+): Promise<{ message: string; redirect_to?: string }> {
   // 1. Update project stage
   const { data: project, error: updateError } = await supabase
     .from("projects")
@@ -106,16 +106,27 @@ export async function moveProjectToStage(
       .eq("type", "quote")
       .limit(1);
 
+    let invoiceId: string | null = null;
+
     if (!existing || existing.length === 0) {
-      await supabase.from("invoices").insert([{
-        project_id: projectId,
-        contact_id: project.contact_id ?? null,
-        type:       "quote",
-        status:     "draft",
-        amount:     project.budget ?? 0,
-      }]);
+      const { data: newInv } = await supabase
+        .from("invoices")
+        .insert([{
+          project_id: projectId,
+          contact_id: project.contact_id ?? null,
+          type:       "quote",
+          status:     "draft",
+          amount:     0,
+        }])
+        .select("id")
+        .single();
+      invoiceId = newInv?.id ?? null;
+    } else {
+      invoiceId = existing[0].id;
     }
-    return { message: "Quote draft created in Accounts." };
+
+    const redirect_to = `/accounts?new_quote=true&project_id=${projectId}${invoiceId ? `&invoice_id=${invoiceId}` : ""}`;
+    return { message: "Quote builder opened — customise and generate PDF", redirect_to };
   }
 
   if (toStage === "booked") {

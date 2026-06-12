@@ -4,9 +4,41 @@ import { useEffect, useState, useCallback } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import {
-  Plus, Search, X, Users, Mail, Phone, Tag, ArrowRightCircle, ChevronRight,
+  Plus, Search, X, Users, Mail, Phone, ArrowRightCircle, ChevronRight,
 } from "lucide-react";
 import { useToast } from "@/lib/toast";
+
+// ─── Source badge ─────────────────────────────────────────────────────────────
+
+const SOURCE_BADGE: Record<string, { label: string; cls: string; icon?: string }> = {
+  meta_ads:  { label: "Meta Ad",   cls: "bg-blue-500/20 border-blue-500/30 text-blue-300",   icon: "M" },
+  instagram: { label: "Instagram", cls: "bg-pink-500/20 border-pink-500/30 text-pink-300",   icon: "IG" },
+  referral:  { label: "Referral",  cls: "bg-green-500/20 border-green-500/30 text-green-300" },
+  website:   { label: "Website",   cls: "bg-zinc-500/20 border-zinc-500/30 text-zinc-400" },
+  "walk-in": { label: "Walk-in",   cls: "bg-amber-500/20 border-amber-500/30 text-amber-300" },
+  google:    { label: "Google",    cls: "bg-yellow-500/20 border-yellow-500/30 text-yellow-300" },
+  manual:    { label: "Manual",    cls: "bg-zinc-500/20 border-zinc-500/30 text-zinc-500" },
+};
+
+function SourceBadge({ source }: { source: string | null }) {
+  if (!source) return null;
+  const cfg = SOURCE_BADGE[source];
+  if (!cfg) {
+    return (
+      <span className="text-[9px] px-2 py-0.5 rounded-full bg-white/[0.04] border border-white/[0.07] text-zinc-500 shrink-0 capitalize">
+        {source}
+      </span>
+    );
+  }
+  return (
+    <span className={`flex items-center gap-1 text-[9px] font-semibold px-2 py-0.5 rounded-full border shrink-0 ${cfg.cls}`}>
+      {cfg.icon && (
+        <span className="font-black leading-none">{cfg.icon}</span>
+      )}
+      {cfg.label}
+    </span>
+  );
+}
 
 interface Contact {
   id: string;
@@ -486,12 +518,7 @@ function LeadRow({
         </div>
       </div>
 
-      {contact.source && (
-        <span className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-white/[0.04] border border-white/[0.07] text-zinc-500 shrink-0">
-          <Tag size={9} />
-          {contact.source}
-        </span>
-      )}
+      <SourceBadge source={contact.source} />
 
       <span
         className={`text-[10px] px-2 py-0.5 rounded-full shrink-0 ${

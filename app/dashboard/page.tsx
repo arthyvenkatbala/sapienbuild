@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Users, FolderOpen, DollarSign, Truck, ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { getStageLabel } from "@/lib/workflow";
+import { useToast } from "@/lib/toast";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -26,6 +27,8 @@ interface ActivityEvent {
 // ─── Realtime hook ────────────────────────────────────────────────────────────
 
 function useRealtimeDashboard() {
+  const toast = useToast();
+
   const [stats,    setStats]    = useState<DashboardStats | null>(null);
   const [activity, setActivity] = useState<ActivityEvent[]>([]);
   const [loading,  setLoading]  = useState(true);
@@ -51,17 +54,26 @@ function useRealtimeDashboard() {
   useEffect(() => {
     fetchAll();
 
-    // Subscribe to table changes — re-fetch on any mutation
     const channel = supabase
       .channel("ott-dashboard")
-      .on("postgres_changes", { event: "*", schema: "public", table: "contacts" },      fetchAll)
-      .on("postgres_changes", { event: "*", schema: "public", table: "projects" },      fetchAll)
-      .on("postgres_changes", { event: "*", schema: "public", table: "invoices" },      fetchAll)
+      // contacts: inspect INSERT payload to detect Meta Ad leads
+      .on<{ source: string | null }>(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "contacts" },
+        (payload) => {
+          fetchAll();
+          if (payload.eventType === "INSERT" && payload.new?.source === "meta_ads") {
+            toast("New lead from Meta Ad");
+          }
+        },
+      )
+      .on("postgres_changes", { event: "*", schema: "public", table: "projects" },        fetchAll)
+      .on("postgres_changes", { event: "*", schema: "public", table: "invoices" },        fetchAll)
       .on("postgres_changes", { event: "*", schema: "public", table: "workflow_events" }, fetchAll)
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [fetchAll]);
+  }, [fetchAll, toast]);
 
   return { stats, activity, loading };
 }

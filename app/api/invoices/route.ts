@@ -7,7 +7,10 @@ export async function GET(request: NextRequest) {
   let query = adminSupabase
     .from("invoices")
     .select(`
-      id, type, status, amount, due_date, notes, line_items, created_at, updated_at,
+      id, type, status, amount, due_date, notes, line_items,
+      invoice_number, client_name, event_dates, events_list, location,
+      discount_type, discount_value, discount_note, pdf_data,
+      created_at, updated_at,
       project:projects ( id, title ),
       contact:contacts ( id, first_name, last_name )
     `)
@@ -33,8 +36,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
 
-  const { type, contact_id, project_id, amount, due_date, notes, line_items } =
-    body as Record<string, string>;
+  const {
+    type, contact_id, project_id, amount, due_date, notes, line_items,
+    client_name, event_dates, events_list, location,
+    discount_type, discount_value, discount_note,
+  } = body as Record<string, string>;
 
   if (!type || !["quote", "invoice", "receipt"].includes(type)) {
     return NextResponse.json({ error: "type must be quote, invoice, or receipt" }, { status: 422 });
@@ -47,13 +53,20 @@ export async function POST(request: NextRequest) {
     .from("invoices")
     .insert([{
       type,
-      contact_id:  contact_id || null,
-      project_id:  project_id || null,
-      amount:      Number(amount),
-      due_date:    due_date || null,
-      notes:       notes || null,
-      line_items:  line_items ? JSON.parse(line_items as unknown as string) : [],
-      status:      "draft",
+      contact_id:     contact_id     || null,
+      project_id:     project_id     || null,
+      amount:         Number(amount) || 0,
+      due_date:       due_date       || null,
+      notes:          notes          || null,
+      line_items:     line_items ? JSON.parse(line_items as unknown as string) : [],
+      client_name:    client_name    || null,
+      event_dates:    event_dates    || null,
+      events_list:    events_list    || null,
+      location:       location       || null,
+      discount_type:  discount_type  || null,
+      discount_value: discount_value ? Number(discount_value) : 0,
+      discount_note:  discount_note  || null,
+      status:         "draft",
     }])
     .select("*")
     .single();

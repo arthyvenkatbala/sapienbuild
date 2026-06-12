@@ -382,7 +382,11 @@ export default function ProjectDetailPage({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       if (data.message) toast(data.message);
-      fetchProject(); // Re-fetch to load any auto-created tasks/invoices
+      if (data.redirect_to) {
+        router.push(data.redirect_to);
+      } else {
+        fetchProject(); // Re-fetch to load any auto-created tasks/invoices
+      }
     } catch (err) {
       setProject((p) => p ? { ...p, workflow_stage: oldStage } : p);
       toast(err instanceof Error ? err.message : "Stage change failed", "error");

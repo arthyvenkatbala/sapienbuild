@@ -53,7 +53,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   // Handle stage transition via single source of truth
   if (workflow_stage && workflow_stage !== from_stage) {
     try {
-      const { message } = await moveProjectToStage(
+      const { message, redirect_to } = await moveProjectToStage(
         adminSupabase,
         id,
         from_stage ?? null,
@@ -71,7 +71,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         .eq("id", id)
         .single();
 
-      return NextResponse.json({ project: data, message });
+      return NextResponse.json({ project: data, message, redirect_to });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Stage update failed";
       console.error("[PATCH /api/projects/:id] stage move:", msg);
