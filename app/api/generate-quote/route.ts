@@ -83,14 +83,7 @@ export async function POST(request: NextRequest) {
       page.drawText(text, { x, y, font, size, color });
     }
 
-    // ── Step 2: White-out dynamic areas ─────────────────────────────────────
-
-    // Client name area
-    page.drawRectangle({ x: 40, y: 670, width: 300, height: 80,  color: white });
-    // Services area
-    page.drawRectangle({ x: 40, y: 200, width: 540, height: 420, color: white });
-    // Total cost value area
-    page.drawRectangle({ x: 160, y: 145, width: 200, height: 25, color: white });
+    
 
     // ── Step 3: Write dynamic content on clean areas ─────────────────────────
 
