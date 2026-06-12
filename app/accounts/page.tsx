@@ -24,6 +24,7 @@ interface Invoice {
   due_date: string | null;
   notes: string | null;
   created_at: string;
+  updated_at: string | null;
   project: { id: string; title: string } | null;
   contact: { id: string; first_name: string; last_name: string } | null;
   // quote-specific
@@ -429,7 +430,7 @@ function InvoiceDetailPanel({
       const data = await res.json();
       if (!res.ok) { toast(data.error ?? "Update failed", "error"); return; }
       onUpdate(data.invoice);
-      toast(status === "paid" ? "Invoice marked as paid" : "Invoice marked as sent");
+      toast(status === "paid" ? "Payment recorded ✓" : "Invoice marked as sent");
     } catch {
       toast("Network error", "error");
     } finally {
@@ -574,6 +575,28 @@ function InvoiceDetailPanel({
               </Link>
             </div>
           )}
+
+          {/* Payment history — shown when paid */}
+          {invoice.status === "paid" && (
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-600 mb-1">
+                Payment History
+              </p>
+              <div className="flex items-center gap-2 text-sm text-green-400">
+                <CheckCircle size={13} />
+                <span>
+                  Paid on{" "}
+                  {invoice.updated_at
+                    ? new Date(invoice.updated_at).toLocaleDateString("en-IN", {
+                        day: "numeric", month: "long", year: "numeric",
+                      })
+                    : new Date(invoice.created_at).toLocaleDateString("en-IN", {
+                        day: "numeric", month: "long", year: "numeric",
+                      })}
+                </span>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Actions */}
@@ -603,22 +626,24 @@ function InvoiceDetailPanel({
             </>
           )}
 
-          {/* Standard status actions */}
-          {invoice.status !== "paid" && invoice.status !== "cancelled" && (
+          {/* Mark as Paid — prominent, only for sent status */}
+          {invoice.status === "sent" && (
             <button
               onClick={() => markAs("paid")}
               disabled={saving !== null}
-              className="w-full py-2.5 rounded-xl bg-green-600 hover:bg-green-500 disabled:opacity-50 text-sm font-medium text-white transition-all flex items-center justify-center gap-2"
+              className="w-full py-3 rounded-xl bg-green-600 hover:bg-green-500 disabled:opacity-50 text-sm font-semibold text-white transition-all flex items-center justify-center gap-2"
             >
               <CheckCircle size={14} />
-              {saving === "paid" ? "Marking…" : "Mark as Paid"}
+              {saving === "paid" ? "Recording payment…" : "Mark as Paid"}
             </button>
           )}
+
+          {/* Mark as Sent — for draft */}
           {invoice.status === "draft" && (
             <button
               onClick={() => markAs("sent")}
               disabled={saving !== null}
-              className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-sm font-medium text-white transition-all"
+              className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-sm font-medium text-white transition-all flex items-center justify-center gap-2"
             >
               {saving === "sent" ? "Marking…" : "Mark as Sent"}
             </button>
@@ -637,12 +662,14 @@ function InvoiceRow({
   onEditQuote,
   onDownloadPDF,
   onSendEmail,
+  onStatusChange,
 }: {
   invoice: Invoice;
   onClick: () => void;
   onEditQuote:    (id: string, projectId: string | null) => void;
   onDownloadPDF:  (invoice: Invoice) => void;
   onSendEmail:    (invoice: Invoice) => void;
+  onStatusChange: (invoice: Invoice, status: "sent" | "paid") => void;
 }) {
   const TypeIcon =
     invoice.type === "invoice" ? FileText :
@@ -727,6 +754,33 @@ function InvoiceRow({
           </button>
         </div>
       )}
+
+      {/* Status action buttons — all invoice types */}
+      <div className="flex items-center shrink-0">
+        {invoice.status === "draft" && (
+          <button
+            title="Mark as Sent"
+            onClick={(e) => { e.stopPropagation(); onStatusChange(invoice, "sent"); }}
+            className="px-2.5 py-1 text-[11px] font-medium rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500/20 transition-all"
+          >
+            Mark Sent
+          </button>
+        )}
+        {invoice.status === "sent" && (
+          <button
+            title="Mark as Paid"
+            onClick={(e) => { e.stopPropagation(); onStatusChange(invoice, "paid"); }}
+            className="px-2.5 py-1 text-[11px] font-medium rounded-lg bg-green-500/10 text-green-400 border border-green-500/20 hover:bg-green-500/20 transition-all"
+          >
+            Mark Paid
+          </button>
+        )}
+        {invoice.status === "paid" && (
+          <span className="px-2.5 py-1 text-[11px] font-medium rounded-lg bg-green-500/10 text-green-400 border border-green-500/20">
+            Paid ✓
+          </span>
+        )}
+      </div>
     </div>
   );
 }
@@ -814,6 +868,23 @@ function AccountsContent() {
   const handleQBSave = () => {
     setShowQB(false);
     fetchInvoices(); // Refresh so the list shows updated amount/status
+  };
+
+  const handleStatusChange = async (invoice: Invoice, newStatus: "sent" | "paid") => {
+    try {
+      const res  = await fetch(`/api/invoices/${invoice.id}`, {
+        method:  "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ status: newStatus }),
+      });
+      const data = await res.json();
+      if (!res.ok) { toast(data.error ?? "Update failed", "error"); return; }
+      handleUpdate(data.invoice);
+      if (newStatus === "paid") toast("Payment recorded ✓");
+      else toast("Invoice marked as sent");
+    } catch {
+      toast("Network error", "error");
+    }
   };
 
   const handleDownloadPDF = async (invoice: Invoice) => {
@@ -954,6 +1025,7 @@ function AccountsContent() {
                 onEditQuote={openQuoteBuilder}
                 onDownloadPDF={handleDownloadPDF}
                 onSendEmail={(i) => setEmailTarget(i)}
+                onStatusChange={handleStatusChange}
               />
             ))
           )}

@@ -117,7 +117,7 @@ export function QuoteBuilder({ invoiceId, projectId, onClose, onSave }: QuoteBui
 
   const subtotal = lineItems
     .filter((i) => i.selected)
-    .reduce((s, i) => s + i.price * i.quantity, 0);
+    .reduce((s, i) => s + i.price * (parseInt(i.events) || 1), 0);
 
   const discountAmount =
     discountType === "fixed"
@@ -436,15 +436,24 @@ export function QuoteBuilder({ invoiceId, projectId, onClose, onSave }: QuoteBui
 
                         {/* Row content */}
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-white mb-2.5 leading-snug">
-                            {item.name}
-                          </p>
-                          <div className="grid grid-cols-1 sm:grid-cols-[72px_1fr_88px] gap-2">
+                          <div className="flex items-center justify-between gap-2 mb-2.5">
+                            <p className="text-sm font-medium text-white leading-snug min-w-0 truncate">
+                              {item.name}
+                            </p>
+                            {item.selected && (
+                              <span className="text-xs text-zinc-400 tabular-nums shrink-0">
+                                {inr(item.price)} × {parseInt(item.events) || 1} = {inr(item.price * (parseInt(item.events) || 1))}
+                              </span>
+                            )}
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-[88px_1fr_88px] gap-2">
                             <div className="space-y-1">
-                              <label className={labelCls}>Events</label>
+                              <label className={labelCls}>No. of sessions</label>
                               <input
-                                className={inlineCls}
-                                placeholder="1,2"
+                                type="number"
+                                className={inlineCls + " text-right"}
+                                placeholder="1"
+                                min="1"
                                 value={item.events}
                                 disabled={!item.selected}
                                 onChange={(e) => updateItem(item.id, { events: e.target.value })}
@@ -539,7 +548,7 @@ export function QuoteBuilder({ invoiceId, projectId, onClose, onSave }: QuoteBui
                         <div key={item.id} className="flex items-center justify-between text-xs gap-2">
                           <span className="text-zinc-400 truncate">{item.name}</span>
                           <span className="text-zinc-300 shrink-0 tabular-nums">
-                            {inr(item.price * item.quantity)}
+                            {inr(item.price * (parseInt(item.events) || 1))}
                           </span>
                         </div>
                       ))}
@@ -578,28 +587,54 @@ export function QuoteBuilder({ invoiceId, projectId, onClose, onSave }: QuoteBui
 
         {/* ─── Section E — Footer actions ───────────────────────────────── */}
         {!loadingData && (
-          <div className="px-6 py-4 border-t border-white/[0.07] bg-[#111114] shrink-0 space-y-2">
-            <button
-              onClick={generatePDF}
-              disabled={generating || saving}
-              className="w-full py-3 rounded-xl bg-yellow-600 hover:bg-yellow-500 disabled:opacity-50 text-sm font-semibold text-white transition-all flex items-center justify-center gap-2"
-            >
-              {generating ? (
-                <><Loader2 size={15} className="animate-spin" /> Generating PDF…</>
-              ) : (
-                <><FileDown size={15} /> Generate Quote PDF</>
-              )}
-            </button>
-            <button
-              onClick={async () => {
-                const ok = await saveQuote();
-                if (ok) { toast("Quote saved as draft"); onSave(); }
-              }}
-              disabled={saving || generating}
-              className="w-full py-2.5 rounded-xl border border-white/[0.07] text-sm text-zinc-400 hover:text-white hover:border-white/[0.15] disabled:opacity-50 transition-all"
-            >
-              {saving ? "Saving…" : "Save Draft"}
-            </button>
+          <div className="border-t border-white/[0.07] shrink-0">
+            {/* Live Summary Bar */}
+            {lineItems.some((i) => i.selected) && (
+              <div className="px-6 py-3 bg-[#0d0d10] border-b border-white/[0.05] space-y-1.5">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-600 mb-2">
+                  {lineItems.filter((i) => i.selected).length} service{lineItems.filter((i) => i.selected).length !== 1 ? "s" : ""} selected
+                </p>
+                <div className="flex justify-between text-xs">
+                  <span className="text-zinc-500">Subtotal</span>
+                  <span className="text-zinc-300 tabular-nums">{inr(subtotal)}</span>
+                </div>
+                {discountAmount > 0 && (
+                  <div className="flex justify-between text-xs">
+                    <span className="text-zinc-500">Discount</span>
+                    <span className="text-red-400 tabular-nums">−{inr(discountAmount)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-xs border-t border-white/[0.05] pt-1.5">
+                  <span className="text-sm font-semibold text-white">Total</span>
+                  <span className="text-base font-bold text-yellow-400 tabular-nums">{inr(total)}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Action buttons */}
+            <div className="px-6 py-4 bg-[#111114] space-y-2">
+              <button
+                onClick={generatePDF}
+                disabled={generating || saving}
+                className="w-full py-3 rounded-xl bg-yellow-600 hover:bg-yellow-500 disabled:opacity-50 text-sm font-semibold text-white transition-all flex items-center justify-center gap-2"
+              >
+                {generating ? (
+                  <><Loader2 size={15} className="animate-spin" /> Generating PDF…</>
+                ) : (
+                  <><FileDown size={15} /> Generate Quote PDF</>
+                )}
+              </button>
+              <button
+                onClick={async () => {
+                  const ok = await saveQuote();
+                  if (ok) { toast("Quote saved as draft"); onSave(); }
+                }}
+                disabled={saving || generating}
+                className="w-full py-2.5 rounded-xl border border-white/[0.07] text-sm text-zinc-400 hover:text-white hover:border-white/[0.15] disabled:opacity-50 transition-all"
+              >
+                {saving ? "Saving…" : "Save Draft"}
+              </button>
+            </div>
           </div>
         )}
       </motion.div>

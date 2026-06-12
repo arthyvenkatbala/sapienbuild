@@ -21,7 +21,30 @@ interface ActivityEvent {
   from_stage: string | null;
   to_stage: string;
   created_at: string;
-  project: { id: string; title: string } | null;
+  project: {
+    id: string;
+    title: string;
+    workflow_stage: string;
+    contact: { id: string; first_name: string; last_name: string } | null;
+  } | null;
+}
+
+// ─── Stage badge colors for activity feed (per spec) ─────────────────────────
+
+const ACTIVITY_STAGE_COLORS: Record<string, string> = {
+  enquiry:         "bg-zinc-500/20 text-zinc-400 border-zinc-500/30",
+  discussion:      "bg-purple-500/20 text-purple-400 border-purple-500/30",
+  quote:           "bg-amber-500/20 text-amber-400 border-amber-500/30",
+  negotiation:     "bg-orange-500/20 text-orange-400 border-orange-500/30",
+  booked:          "bg-green-500/20 text-green-400 border-green-500/30",
+  execution:       "bg-blue-500/20 text-blue-400 border-blue-500/30",
+  feedback:        "bg-pink-500/20 text-pink-400 border-pink-500/30",
+  post_production: "bg-teal-500/20 text-teal-400 border-teal-500/30",
+  delivery:        "bg-yellow-500/20 text-yellow-400 border-yellow-500/30",
+};
+
+function stageBadgeCls(stage: string): string {
+  return ACTIVITY_STAGE_COLORS[stage] ?? "bg-zinc-500/20 text-zinc-400 border-zinc-500/30";
 }
 
 // ─── Realtime hook ────────────────────────────────────────────────────────────
@@ -216,7 +239,13 @@ export default function DashboardPage() {
           ) : (
             <div className="space-y-0">
               {activity.map((event, i) => {
-                const project = event.project as { id: string; title: string } | null;
+                const project = event.project;
+                const contact = project?.contact;
+                const clientName = contact
+                  ? `${contact.first_name} ${contact.last_name}`.trim()
+                  : null;
+                const currentStage = project?.workflow_stage ?? event.to_stage;
+
                 return (
                   <div
                     key={event.id}
@@ -232,15 +261,20 @@ export default function DashboardPage() {
                           className="text-sm text-white hover:text-blue-300 transition-colors truncate block"
                         >
                           {project.title}
+                          {clientName && (
+                            <span className="text-zinc-500"> · {clientName}</span>
+                          )}
                         </Link>
                       ) : (
                         <p className="text-sm text-white truncate">Unknown project</p>
                       )}
-                      <p className="text-xs text-zinc-500">
-                        {event.from_stage
-                          ? `${getStageLabel(event.from_stage)} → ${getStageLabel(event.to_stage)}`
-                          : `Moved to ${getStageLabel(event.to_stage)}`}
-                      </p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span
+                          className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full border capitalize ${stageBadgeCls(currentStage)}`}
+                        >
+                          {getStageLabel(currentStage)}
+                        </span>
+                      </div>
                     </div>
                     <span className="text-[11px] text-zinc-600 shrink-0">
                       {timeAgo(event.created_at)}

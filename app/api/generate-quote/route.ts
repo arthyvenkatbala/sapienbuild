@@ -60,15 +60,16 @@ export async function POST(request: NextRequest) {
     // 3. Load PDF
     const pdfDoc = await PDFDocument.load(templateBytes);
 
-    // 4. Embed standard fonts (Helvetica supports Latin-1 only — ₹ is not available)
+    // 4. Embed standard fonts (Helvetica — Latin-1 encoding, ₹ not available)
     const boldFont: PDFFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
     const regFont:  PDFFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
 
     // 5. Target ONLY page 4 (index 3) — never touch other pages
     const page = pdfDoc.getPage(3);
 
-    const dark = rgb(0.102, 0.102, 0.102); // #1a1a1a
-    const grey = rgb(0.4,   0.4,   0.4);   // #666666
+    const white = rgb(1,     1,     1);     // white fill for rectangles
+    const dark  = rgb(0.102, 0.102, 0.102); // #1a1a1a
+    const grey  = rgb(0.4,   0.4,   0.4);   // #666666
 
     function drawAt(
       text: string,
@@ -82,68 +83,71 @@ export async function POST(request: NextRequest) {
       page.drawText(text, { x, y, font, size, color });
     }
 
-    // ─── Client name ────────────────────────────────────────────────────────
+    // ── Step 2: White-out dynamic areas ─────────────────────────────────────
 
-    const contact = invoice.contact as { first_name?: string; last_name?: string } | null;
+    // Client name area
+    page.drawRectangle({ x: 40, y: 670, width: 300, height: 80,  color: white });
+    // Services area
+    page.drawRectangle({ x: 40, y: 200, width: 540, height: 420, color: white });
+    // Total cost value area
+    page.drawRectangle({ x: 160, y: 145, width: 200, height: 25, color: white });
+
+    // ── Step 3: Write dynamic content on clean areas ─────────────────────────
+
+    // CLIENT NAME
+    const contact  = invoice.contact as { first_name?: string; last_name?: string } | null;
     const fullName = `${contact?.first_name ?? ""} ${contact?.last_name ?? ""}`.trim();
     const savedName = invoice.client_name as string | null;
     const clientName = savedName ?? (fullName || "Client");
 
-    drawAt(clientName, 45, 700, boldFont, 16);
+    drawAt(clientName, 45, 735, boldFont, 14);
 
-    // ─── Location ───────────────────────────────────────────────────────────
-
+    // LOCATION
     const loc =
       (invoice.location as string | null) ??
       (invoice.project as { location?: string | null } | null)?.location ??
       "";
-    if (loc) drawAt(`Location:  ${loc}`, 45, 680, regFont, 11);
+    if (loc) drawAt(`Location:  ${loc}`, 45, 718, regFont, 10);
 
-    // ─── Dates ──────────────────────────────────────────────────────────────
-
+    // DATES
     const eventDates = invoice.event_dates as string | null;
-    if (eventDates) drawAt(`Dates:       ${eventDates}`, 45, 665, regFont, 11);
+    if (eventDates) drawAt(`Dates:      ${eventDates}`, 45, 704, regFont, 10);
 
-    // ─── Events list ────────────────────────────────────────────────────────
-
+    // EVENTS LIST
     const eventsList = invoice.events_list as string | null;
-    if (eventsList) drawAt(`Events :    ${eventsList}`, 45, 650, regFont, 11);
+    if (eventsList) drawAt(`Events :   ${eventsList}`, 45, 690, regFont, 10);
 
-    // ─── Service line items ──────────────────────────────────────────────────
+    // ── SERVICE LINE ITEMS ───────────────────────────────────────────────────
 
     const rawItems = invoice.line_items as LineItem[] | null;
     const selected = Array.isArray(rawItems)
       ? rawItems.filter((i) => i.selected)
       : [];
 
-    let cy = 590;
+    let cy = 620;
 
     for (const item of selected) {
-      if (cy < 200) break; // safety: don't overflow into total area
+      if (cy < 220) break; // safety: don't overflow into total area
 
       // Service name — left column
-      drawAt(item.name, 45, cy, boldFont, 11);
+      drawAt(item.name, 45, cy, boldFont, 10);
 
-      // Note below name
+      // Note below name (grey, smaller)
       if (item.note?.trim()) {
-        drawAt(item.note.trim(), 45, cy - 14, regFont, 10, grey);
+        drawAt(item.note.trim(), 45, cy - 13, regFont, 9, grey);
       }
 
-      // Events covered — right-aligned ending at x=430
-      const evLabel = item.events?.trim();
-      if (evLabel) {
-        const evText  = `Events - ${evLabel}`;
-        const evWidth = regFont.widthOfTextAtSize(evText, 11);
-        drawAt(evText, 430 - evWidth, cy, regFont, 11);
-      }
+      // Sessions / events — right column
+      const sessions = parseInt(item.events) || 1;
+      const evText   = sessions > 1 ? `Sessions - ${sessions}` : "Events - 1";
+      drawAt(evText, 430, cy, regFont, 10);
 
-      cy -= 42;
+      cy -= 38;
     }
 
-    // ─── Total ──────────────────────────────────────────────────────────────
-    // Template already reads "Total cost : INR" — we write the number only
+    // ── TOTAL COST ───────────────────────────────────────────────────────────
     const total = Number(invoice.amount) || 0;
-    drawAt(inrNumber(total), 170, 160, boldFont, 14);
+    drawAt(inrNumber(total), 220, 158, boldFont, 13);
 
     // 6. Serialise
     const pdfBytes = await pdfDoc.save();
