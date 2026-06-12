@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   Save, Play, Loader2, Check, Folder, Clock, X, Plus,
@@ -33,7 +33,7 @@ interface Settings {
 
 const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-export default function SocialSettingsPage() {
+function SocialSettingsContent() {
   const toast       = useToast();
   const searchParams = useSearchParams();
 
@@ -413,5 +413,17 @@ export default function SocialSettingsPage() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function SocialSettingsPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex-1 flex items-center justify-center min-h-screen">
+        <Loader2 size={22} className="text-zinc-600 animate-spin" />
+      </div>
+    }>
+      <SocialSettingsContent />
+    </Suspense>
   );
 }
