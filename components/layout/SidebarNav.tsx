@@ -14,6 +14,7 @@ import {
   Camera,
   Menu,
   X,
+  Globe,
   type LucideIcon,
 } from "lucide-react";
 
@@ -72,15 +73,37 @@ const NAV: NavItem[] = [
     icon: Receipt,
     activeColor: "text-green-400",
   },
+  {
+    label: "Social",
+    href: "/social",
+    icon: Globe,
+    activeColor: "text-pink-400",
+    children: [
+      { label: "Settings", href: "/social/settings" },
+    ],
+  },
 ];
 
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
-  const [crmOpen, setCrmOpen] = useState(pathname.startsWith("/crm"));
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({
+    "/crm":    pathname.startsWith("/crm"),
+    "/social": pathname.startsWith("/social"),
+  });
 
   useEffect(() => {
-    if (pathname.startsWith("/crm")) setCrmOpen(true);
+    if (pathname.startsWith("/crm"))    setOpenSections((s) => ({ ...s, "/crm": true }));
+    if (pathname.startsWith("/social")) setOpenSections((s) => ({ ...s, "/social": true }));
   }, [pathname]);
+
+  const toggleSection = (href: string) => {
+    setOpenSections((s) => ({ ...s, [href]: !s[href] }));
+  };
+
+  const CHILD_ACTIVE_COLOR: Record<string, string> = {
+    "/crm":    "text-teal-400 bg-teal-500/10",
+    "/social": "text-pink-400 bg-pink-500/10",
+  };
 
   return (
     <aside className="w-60 shrink-0 bg-[#0d0d10] border-r border-white/[0.06] flex flex-col h-full">
@@ -106,12 +129,13 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
               ? pathname === "/dashboard" || pathname === "/"
               : pathname === item.href || pathname.startsWith(item.href + "/");
           const hasChildren = !!item.children?.length;
+          const isOpen      = !!openSections[item.href];
 
           return (
             <div key={item.href}>
               {hasChildren ? (
                 <button
-                  onClick={() => setCrmOpen((o) => !o)}
+                  onClick={() => toggleSection(item.href)}
                   className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all group ${
                     isActive
                       ? "bg-white/[0.08] text-white"
@@ -129,7 +153,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                   <span className="flex-1 text-left">{item.label}</span>
                   <ChevronDown
                     size={12}
-                    className={`text-zinc-600 transition-transform duration-200 ${crmOpen ? "rotate-180" : ""}`}
+                    className={`text-zinc-600 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
                   />
                 </button>
               ) : (
@@ -154,12 +178,13 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                 </Link>
               )}
 
-              {/* Sub-nav for CRM */}
-              {hasChildren && crmOpen && (
+              {/* Sub-nav */}
+              {hasChildren && isOpen && (
                 <div className="ml-6 mt-0.5 space-y-0.5 border-l border-white/[0.06] pl-3">
                   {item.children!.map((child) => {
                     const childActive =
                       pathname === child.href || pathname.startsWith(child.href + "/");
+                    const activeClass = CHILD_ACTIVE_COLOR[item.href] ?? "text-zinc-300 bg-white/[0.06]";
                     return (
                       <Link
                         key={child.href}
@@ -167,7 +192,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                         onClick={onNavigate}
                         className={`block px-2 py-1.5 rounded-lg text-xs transition-all ${
                           childActive
-                            ? "text-teal-400 bg-teal-500/10"
+                            ? activeClass
                             : "text-zinc-600 hover:text-zinc-300 hover:bg-white/[0.04]"
                         }`}
                       >

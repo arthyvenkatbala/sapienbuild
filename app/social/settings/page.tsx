@@ -1,0 +1,417 @@
+"use client";
+
+import { useEffect, useState, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
+import {
+  Save, Play, Loader2, Check, Folder, Clock, X, Plus,
+  PlayCircle, Settings2, Calendar,
+} from "lucide-react";
+import { useToast } from "@/lib/toast";
+
+const inputCls =
+  "w-full bg-[#0d0d10] border border-white/[0.08] rounded-xl px-3 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-600 outline-none focus:border-pink-500/40 transition-all";
+
+const labelCls = "text-[10px] font-semibold uppercase tracking-widest text-zinc-500";
+
+function SectionHead({ icon: Icon, title }: { icon: React.ElementType; title: string }) {
+  return (
+    <h2 className="flex items-center gap-2 text-sm font-semibold text-white mb-5">
+      <Icon size={15} className="text-pink-400" />
+      {title}
+    </h2>
+  );
+}
+
+interface Settings {
+  photos_folder_id:              string;
+  videos_folder_id:              string;
+  caption_tone:                  string;
+  always_include_hashtags:       string[];
+  blackout_days:                 number[];
+  min_days_between_same_wedding: number;
+}
+
+const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+export default function SocialSettingsPage() {
+  const toast       = useToast();
+  const searchParams = useSearchParams();
+
+  const [settings, setSettings] = useState<Settings>({
+    photos_folder_id:              "",
+    videos_folder_id:              "",
+    caption_tone:                  "storytelling",
+    always_include_hashtags:       ["#OneTh ousandTales","#WeddingPhotography","#Chennai","#CandidWedding","#WeddingFilm"],
+    blackout_days:                 [],
+    min_days_between_same_wedding: 3,
+  });
+
+  const [loading,       setLoading]       = useState(true);
+  const [saving,        setSaving]        = useState(false);
+  const [runningAgent,  setRunningAgent]  = useState(false);
+  const [lastRun,       setLastRun]       = useState<string | null>(null);
+  const [ytConnected,  setYtConnected]  = useState(false);
+  const [ytChannel,    setYtChannel]    = useState<string | null>(null);
+  const [newHashtag,   setNewHashtag]   = useState("");
+
+  // ── Load settings ──────────────────────────────────────────────────────────
+
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [settingsRes, runsRes, ytRes] = await Promise.all([
+        fetch("/api/agent/settings"),
+        fetch("/api/agent/runs?limit=1"),
+        fetch("/api/youtube/status"),
+      ]);
+
+      if (settingsRes.ok) {
+        const d = await settingsRes.json() as { settings?: Settings };
+        if (d.settings) {
+          setSettings({
+            photos_folder_id:              d.settings.photos_folder_id              ?? "",
+            videos_folder_id:              d.settings.videos_folder_id              ?? "",
+            caption_tone:                  d.settings.caption_tone                  ?? "storytelling",
+            always_include_hashtags:       d.settings.always_include_hashtags       ?? [],
+            blackout_days:                 d.settings.blackout_days                 ?? [],
+            min_days_between_same_wedding: d.settings.min_days_between_same_wedding ?? 3,
+          });
+        }
+      }
+
+      if (runsRes.ok) {
+        const d = await runsRes.json() as { runs?: Array<{ created_at: string; status: string }> };
+        const last = d.runs?.[0];
+        if (last) setLastRun(last.created_at);
+      }
+
+      if (ytRes.ok) {
+        const d = await ytRes.json() as { connected: boolean; channel_name?: string };
+        setYtConnected(d.connected);
+        setYtChannel(d.channel_name ?? null);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+    const ytStatus = searchParams.get("youtube");
+    if (ytStatus === "connected") toast("YouTube connected successfully!");
+    if (ytStatus === "error")     toast("YouTube connection failed", "error");
+  }, [loadData, searchParams, toast]);
+
+  // ── Save settings ──────────────────────────────────────────────────────────
+
+  const saveSettings = async () => {
+    setSaving(true);
+    try {
+      const res = await fetch("/api/agent/settings", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify(settings),
+      });
+      if (!res.ok) {
+        const d = await res.json() as { error?: string };
+        toast(d.error ?? "Save failed", "error");
+        return;
+      }
+      toast("Settings saved");
+    } catch {
+      toast("Network error", "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // ── Run agent ─────────────────────────────────────────────────────────────
+
+  const runAgent = async () => {
+    setRunningAgent(true);
+    try {
+      const res  = await fetch("/api/agent/run-weekly", {
+        method:  "POST",
+        headers: { "x-cron-secret": process.env.NEXT_PUBLIC_CRON_SECRET ?? "" },
+      });
+      const data = await res.json() as { success: boolean; error?: string };
+      if (!data.success) { toast(data.error ?? "Agent run failed", "error"); return; }
+      toast("Agent ran — 14 suggestions generated! Go to AI Suggestions.");
+      setLastRun(new Date().toISOString());
+    } catch {
+      toast("Network error", "error");
+    } finally {
+      setRunningAgent(false);
+    }
+  };
+
+  // ── Hashtag helpers ────────────────────────────────────────────────────────
+
+  const addHashtag = () => {
+    const tag = newHashtag.trim().startsWith("#")
+      ? newHashtag.trim()
+      : `#${newHashtag.trim()}`;
+    if (!tag || tag === "#") return;
+    if (!settings.always_include_hashtags.includes(tag)) {
+      setSettings((s) => ({ ...s, always_include_hashtags: [...s.always_include_hashtags, tag] }));
+    }
+    setNewHashtag("");
+  };
+
+  const removeHashtag = (h: string) => {
+    setSettings((s) => ({
+      ...s,
+      always_include_hashtags: s.always_include_hashtags.filter((x) => x !== h),
+    }));
+  };
+
+  const toggleBlackout = (day: number) => {
+    setSettings((s) => ({
+      ...s,
+      blackout_days: s.blackout_days.includes(day)
+        ? s.blackout_days.filter((d) => d !== day)
+        : [...s.blackout_days, day],
+    }));
+  };
+
+  if (loading) {
+    return (
+      <div className="flex-1 flex items-center justify-center min-h-screen">
+        <Loader2 size={22} className="text-zinc-600 animate-spin" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col min-h-screen">
+      <header className="sticky top-0 z-30 bg-[#0a0a0d]/80 backdrop-blur-md border-b border-white/[0.06] px-8 py-4 flex items-center justify-between">
+        <div>
+          <h1 className="text-base font-semibold text-white">Social Settings</h1>
+          <p className="text-xs text-zinc-500">Configure your AI content agent</p>
+        </div>
+        <button
+          onClick={saveSettings}
+          disabled={saving}
+          className="flex items-center gap-1.5 text-xs text-white bg-pink-600 hover:bg-pink-500 disabled:opacity-50 px-4 py-1.5 rounded-xl transition-all font-medium"
+        >
+          {saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+          Save Settings
+        </button>
+      </header>
+
+      <main className="flex-1 px-6 md:px-8 py-8 max-w-2xl w-full space-y-10">
+
+        {/* ─── A. Content Folders ──────────────────────────────────────────── */}
+        <section className="bg-[#111114] border border-white/[0.07] rounded-2xl p-6">
+          <SectionHead icon={Folder} title="Content Folders" />
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <label className={labelCls}>Photos Folder ID</label>
+              <input
+                className={inputCls}
+                placeholder="1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms"
+                value={settings.photos_folder_id}
+                onChange={(e) => setSettings((s) => ({ ...s, photos_folder_id: e.target.value }))}
+              />
+              <p className="text-[10px] text-zinc-600">
+                Open folder in Google Drive → copy the ID from the URL (after /folders/)
+              </p>
+              {settings.photos_folder_id && (
+                <p className="flex items-center gap-1 text-[10px] text-green-400">
+                  <Check size={10} /> Folder ID set
+                </p>
+              )}
+            </div>
+            <div className="space-y-1.5">
+              <label className={labelCls}>Videos Folder ID</label>
+              <input
+                className={inputCls}
+                placeholder="1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms"
+                value={settings.videos_folder_id}
+                onChange={(e) => setSettings((s) => ({ ...s, videos_folder_id: e.target.value }))}
+              />
+              {settings.videos_folder_id && (
+                <p className="flex items-center gap-1 text-[10px] text-green-400">
+                  <Check size={10} /> Folder ID set
+                </p>
+              )}
+            </div>
+          </div>
+        </section>
+
+        {/* ─── B. Agent Schedule ───────────────────────────────────────────── */}
+        <section className="bg-[#111114] border border-white/[0.07] rounded-2xl p-6">
+          <SectionHead icon={Clock} title="Agent Schedule" />
+          <div className="bg-pink-500/5 border border-pink-500/15 rounded-xl px-4 py-3 mb-5">
+            <p className="text-xs text-zinc-300">
+              Agent runs automatically every <span className="text-pink-300 font-medium">Monday at 6:00 AM IST</span> to generate the week&apos;s content plan.
+            </p>
+          </div>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs text-zinc-500">Last run</p>
+              <p className="text-sm text-zinc-300 mt-0.5">
+                {lastRun
+                  ? new Date(lastRun).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })
+                  : "Never run"}
+              </p>
+            </div>
+            <button
+              onClick={runAgent}
+              disabled={runningAgent}
+              className="flex items-center gap-2 text-xs font-medium text-white bg-pink-600 hover:bg-pink-500 disabled:opacity-50 px-4 py-2 rounded-xl transition-all"
+            >
+              {runningAgent
+                ? <><Loader2 size={13} className="animate-spin" /> Running…</>
+                : <><Play size={13} /> Run agent now</>}
+            </button>
+          </div>
+        </section>
+
+        {/* ─── C. Caption Preferences ──────────────────────────────────────── */}
+        <section className="bg-[#111114] border border-white/[0.07] rounded-2xl p-6">
+          <SectionHead icon={Settings2} title="Caption Preferences" />
+
+          <div className="space-y-5">
+            <div className="space-y-2">
+              <label className={labelCls}>Caption Tone</label>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { value: "storytelling", label: "Storytelling",  desc: "Authentic, emotional (150–250 words)" },
+                  { value: "promotional",  label: "Promotional",   desc: "Benefit-focused (80–120 words)" },
+                  { value: "minimal",      label: "Minimal",       desc: "Clean, poetic (under 60 words)" },
+                ].map((opt) => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setSettings((s) => ({ ...s, caption_tone: opt.value }))}
+                    className={`px-3 py-2 rounded-xl border text-sm transition-all text-left ${
+                      settings.caption_tone === opt.value
+                        ? "bg-pink-500/15 border-pink-500/40 text-pink-300"
+                        : "border-white/[0.07] text-zinc-500 hover:text-zinc-300 hover:border-white/[0.15]"
+                    }`}
+                  >
+                    <p className="font-medium leading-none">{opt.label}</p>
+                    <p className="text-[10px] mt-1 opacity-70">{opt.desc}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className={labelCls}>Always Include Hashtags</label>
+              <div className="flex flex-wrap gap-2 mb-2">
+                {settings.always_include_hashtags.map((h) => (
+                  <span key={h} className="flex items-center gap-1 text-xs bg-pink-500/10 border border-pink-500/20 text-pink-300 px-2.5 py-1 rounded-lg">
+                    {h}
+                    <button onClick={() => removeHashtag(h)} className="hover:text-white transition-colors">
+                      <X size={10} />
+                    </button>
+                  </span>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <input
+                  className={inputCls}
+                  placeholder="#NewHashtag"
+                  value={newHashtag}
+                  onChange={(e) => setNewHashtag(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addHashtag(); }}}
+                />
+                <button
+                  onClick={addHashtag}
+                  className="shrink-0 px-3 py-2 rounded-xl bg-pink-600/80 hover:bg-pink-600 text-white transition-all"
+                >
+                  <Plus size={14} />
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className={labelCls}>Min. days between same wedding</label>
+              <input
+                type="number"
+                min={1}
+                max={7}
+                className={inputCls + " max-w-[120px]"}
+                value={settings.min_days_between_same_wedding}
+                onChange={(e) => setSettings((s) => ({ ...s, min_days_between_same_wedding: Number(e.target.value) || 3 }))}
+              />
+            </div>
+          </div>
+        </section>
+
+        {/* ─── D. Blackout Days ────────────────────────────────────────────── */}
+        <section className="bg-[#111114] border border-white/[0.07] rounded-2xl p-6">
+          <SectionHead icon={Calendar} title="Blackout Days" />
+          <p className="text-xs text-zinc-500 mb-4">Uncheck days to skip content suggestions on those days.</p>
+          <div className="flex flex-wrap gap-2">
+            {DAY_LABELS.map((label, i) => {
+              const dayNum = i + 1;
+              const active = !settings.blackout_days.includes(dayNum);
+              return (
+                <button
+                  key={dayNum}
+                  onClick={() => toggleBlackout(dayNum)}
+                  className={`w-12 py-2 rounded-xl border text-xs font-medium transition-all ${
+                    active
+                      ? "bg-pink-500/15 border-pink-500/40 text-pink-300"
+                      : "border-white/[0.07] text-zinc-600"
+                  }`}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* ─── E. YouTube ──────────────────────────────────────────────────── */}
+        <section className="bg-[#111114] border border-white/[0.07] rounded-2xl p-6">
+          <SectionHead icon={PlayCircle} title="YouTube" />
+          {ytConnected ? (
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="flex items-center gap-2 text-sm text-green-400 font-medium">
+                  <Check size={14} /> YouTube connected
+                </p>
+                {ytChannel && (
+                  <p className="text-xs text-zinc-500 mt-0.5">Channel: {ytChannel}</p>
+                )}
+              </div>
+              <a
+                href="/api/youtube/auth"
+                className="text-xs text-zinc-600 hover:text-zinc-400 underline transition-colors"
+              >
+                Reconnect
+              </a>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-zinc-400">Connect YouTube to post reels as Shorts automatically.</p>
+              <a
+                href="/api/youtube/auth"
+                className="flex items-center gap-2 text-xs font-medium text-white bg-red-600 hover:bg-red-500 px-4 py-2 rounded-xl transition-all"
+              >
+                <PlayCircle size={13} /> Connect YouTube
+              </a>
+            </div>
+          )}
+        </section>
+
+        {/* Save button (bottom) */}
+        <div className="pb-10">
+          <button
+            onClick={saveSettings}
+            disabled={saving}
+            className="flex items-center gap-2 text-sm font-medium text-white bg-pink-600 hover:bg-pink-500 disabled:opacity-50 px-6 py-3 rounded-xl transition-all"
+          >
+            {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+            Save all settings
+          </button>
+        </div>
+      </main>
+    </div>
+  );
+}
