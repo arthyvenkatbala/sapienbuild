@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   Save, Play, Loader2, Check, Folder, Clock, X, Plus,
-  PlayCircle, Settings2, Calendar, Search,
+  PlayCircle, Settings2, Calendar, Search, MapPin,
 } from "lucide-react";
 import { useToast } from "@/lib/toast";
 
@@ -54,6 +54,8 @@ function SocialSettingsContent() {
   const [ytChannel,    setYtChannel]    = useState<string | null>(null);
   const [gscConnected, setGscConnected] = useState(false);
   const [gscSiteUrl,   setGscSiteUrl]   = useState<string | null>(null);
+  const [gmbConnected,  setGmbConnected]  = useState(false);
+  const [gmbLocation,   setGmbLocation]   = useState<string | null>(null);
   const [newHashtag,   setNewHashtag]   = useState("");
 
   // ── Load settings ──────────────────────────────────────────────────────────
@@ -61,11 +63,12 @@ function SocialSettingsContent() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [settingsRes, runsRes, ytRes, gscRes] = await Promise.all([
+      const [settingsRes, runsRes, ytRes, gscRes, gmbRes] = await Promise.all([
         fetch("/api/agent/settings"),
         fetch("/api/agent/runs?limit=1"),
         fetch("/api/youtube/status"),
         fetch("/api/gsc/status"),
+        fetch("/api/gmb/status"),
       ]);
 
       if (settingsRes.ok) {
@@ -99,6 +102,12 @@ function SocialSettingsContent() {
         setGscConnected(d.connected);
         setGscSiteUrl(d.site_url ?? null);
       }
+
+      if (gmbRes.ok) {
+        const d = await gmbRes.json() as { connected: boolean; location_name?: string };
+        setGmbConnected(d.connected);
+        setGmbLocation(d.location_name ?? null);
+      }
     } catch (e) {
       console.error(e);
     } finally {
@@ -115,6 +124,10 @@ function SocialSettingsContent() {
     const gscStatus = searchParams.get("gsc");
     if (gscStatus === "connected") toast("Google Search Console connected!");
     if (gscStatus === "error")     toast("Search Console connection failed", "error");
+
+    const gmbStatus = searchParams.get("gmb");
+    if (gmbStatus === "connected") toast("Google My Business connected!");
+    if (gmbStatus === "error")     toast("Google My Business connection failed", "error");
   }, [loadData, searchParams, toast]);
 
   // ── Save settings ──────────────────────────────────────────────────────────
@@ -441,6 +454,39 @@ function SocialSettingsContent() {
                 className="flex items-center gap-2 text-xs font-medium text-white bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded-xl transition-all"
               >
                 <Search size={13} /> Connect Search Console
+              </a>
+            </div>
+          )}
+        </section>
+
+        {/* ─── G. Google My Business ───────────────────────────────────────── */}
+        <section className="bg-[#111114] border border-white/[0.07] rounded-2xl p-6">
+          <SectionHead icon={MapPin} title="Google My Business" />
+          {gmbConnected ? (
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="flex items-center gap-2 text-sm text-green-400 font-medium">
+                  <Check size={14} /> Google My Business connected
+                </p>
+                {gmbLocation && (
+                  <p className="text-xs text-zinc-500 mt-0.5">Location: {gmbLocation}</p>
+                )}
+              </div>
+              <a
+                href="/api/gmb/auth"
+                className="text-xs text-zinc-600 hover:text-zinc-400 underline transition-colors"
+              >
+                Reconnect
+              </a>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-zinc-400">Connect to manage reviews and posts on your Business Profile.</p>
+              <a
+                href="/api/gmb/auth"
+                className="flex items-center gap-2 text-xs font-medium text-white bg-emerald-600 hover:bg-emerald-500 px-4 py-2 rounded-xl transition-all"
+              >
+                <MapPin size={13} /> Connect My Business
               </a>
             </div>
           )}
