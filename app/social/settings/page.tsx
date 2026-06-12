@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   Save, Play, Loader2, Check, Folder, Clock, X, Plus,
-  PlayCircle, Settings2, Calendar,
+  PlayCircle, Settings2, Calendar, Search,
 } from "lucide-react";
 import { useToast } from "@/lib/toast";
 
@@ -52,6 +52,8 @@ function SocialSettingsContent() {
   const [lastRun,       setLastRun]       = useState<string | null>(null);
   const [ytConnected,  setYtConnected]  = useState(false);
   const [ytChannel,    setYtChannel]    = useState<string | null>(null);
+  const [gscConnected, setGscConnected] = useState(false);
+  const [gscSiteUrl,   setGscSiteUrl]   = useState<string | null>(null);
   const [newHashtag,   setNewHashtag]   = useState("");
 
   // ── Load settings ──────────────────────────────────────────────────────────
@@ -59,10 +61,11 @@ function SocialSettingsContent() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [settingsRes, runsRes, ytRes] = await Promise.all([
+      const [settingsRes, runsRes, ytRes, gscRes] = await Promise.all([
         fetch("/api/agent/settings"),
         fetch("/api/agent/runs?limit=1"),
         fetch("/api/youtube/status"),
+        fetch("/api/gsc/status"),
       ]);
 
       if (settingsRes.ok) {
@@ -90,6 +93,12 @@ function SocialSettingsContent() {
         setYtConnected(d.connected);
         setYtChannel(d.channel_name ?? null);
       }
+
+      if (gscRes.ok) {
+        const d = await gscRes.json() as { connected: boolean; site_url?: string };
+        setGscConnected(d.connected);
+        setGscSiteUrl(d.site_url ?? null);
+      }
     } catch (e) {
       console.error(e);
     } finally {
@@ -99,9 +108,13 @@ function SocialSettingsContent() {
 
   useEffect(() => {
     loadData();
-    const ytStatus = searchParams.get("youtube");
+    const ytStatus  = searchParams.get("youtube");
     if (ytStatus === "connected") toast("YouTube connected successfully!");
     if (ytStatus === "error")     toast("YouTube connection failed", "error");
+
+    const gscStatus = searchParams.get("gsc");
+    if (gscStatus === "connected") toast("Google Search Console connected!");
+    if (gscStatus === "error")     toast("Search Console connection failed", "error");
   }, [loadData, searchParams, toast]);
 
   // ── Save settings ──────────────────────────────────────────────────────────
@@ -395,6 +408,39 @@ function SocialSettingsContent() {
                 className="flex items-center gap-2 text-xs font-medium text-white bg-red-600 hover:bg-red-500 px-4 py-2 rounded-xl transition-all"
               >
                 <PlayCircle size={13} /> Connect YouTube
+              </a>
+            </div>
+          )}
+        </section>
+
+        {/* ─── F. Google Search Console ────────────────────────────────────── */}
+        <section className="bg-[#111114] border border-white/[0.07] rounded-2xl p-6">
+          <SectionHead icon={Search} title="Google Search Console" />
+          {gscConnected ? (
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="flex items-center gap-2 text-sm text-green-400 font-medium">
+                  <Check size={14} /> Search Console connected
+                </p>
+                {gscSiteUrl && (
+                  <p className="text-xs text-zinc-500 mt-0.5">Site: {gscSiteUrl}</p>
+                )}
+              </div>
+              <a
+                href="/api/gsc/auth"
+                className="text-xs text-zinc-600 hover:text-zinc-400 underline transition-colors"
+              >
+                Reconnect
+              </a>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-zinc-400">Connect to pull search performance data for your site.</p>
+              <a
+                href="/api/gsc/auth"
+                className="flex items-center gap-2 text-xs font-medium text-white bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded-xl transition-all"
+              >
+                <Search size={13} /> Connect Search Console
               </a>
             </div>
           )}
