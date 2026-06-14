@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/lib/toast";
 import { QuoteBuilder } from "./QuoteBuilder";
+import { ProjectPaymentsSection } from "./ProjectPaymentsSection";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1029,6 +1030,11 @@ function AccountsContent() {
               />
             ))
           )}
+        </div>
+
+        {/* ── Project Payment Tracker ────────────────────────────────────── */}
+        <div className="mt-10">
+          <ProjectPaymentsSection />
         </div>
       </main>
 
