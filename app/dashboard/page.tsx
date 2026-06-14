@@ -8,6 +8,7 @@ import AssetChart, { type AssetCategoryData } from "./AssetChart";
 import AccountsChart, { type InvoiceTypeData } from "./AccountsChart";
 import UpcomingEvents, { type UpcomingProject } from "./UpcomingEvents";
 import QuickActions from "./QuickActions";
+import ServiceDueWidget, { type ServiceDueAsset } from "./ServiceDueWidget";
 
 const STAGE_ORDER = [
   "enquiry", "discussion", "quote", "negotiation",
@@ -38,6 +39,12 @@ function getTodayLabel(): string {
   });
 }
 
+function addDays(d: Date, n: number): string {
+  const copy = new Date(d);
+  copy.setDate(copy.getDate() + n);
+  return copy.toISOString().slice(0, 10);
+}
+
 export default async function DashboardPage() {
   const now            = new Date();
   const thisMonthStart = new Date(now.getFullYear(), now.getMonth(),     1).toISOString();
@@ -55,6 +62,8 @@ export default async function DashboardPage() {
     allInvoicesRes,
     // ── Upcoming events ───────────────────────────────────────────────────────
     upcomingRes,
+    // ── Service-due assets ────────────────────────────────────────────────────
+    serviceDueRes,
   ] = await Promise.allSettled([
     adminSupabase.from("contacts").select("id", { count: "exact", head: true }).eq("type", "lead"),
     adminSupabase.from("contacts").select("id", { count: "exact", head: true }).eq("type", "lead").gte("created_at", thisMonthStart),
@@ -77,6 +86,13 @@ export default async function DashboardPage() {
       .not("event_date", "is", null)
       .order("event_date", { ascending: true })
       .limit(6),
+    adminSupabase
+      .from("assets")
+      .select("id, name, category, next_service_due")
+      .not("next_service_due", "is", null)
+      .lte("next_service_due", addDays(now, 14))
+      .order("next_service_due", { ascending: true })
+      .limit(5),
   ]);
 
   // ── Stats ────────────────────────────────────────────────────────────────────
@@ -141,6 +157,9 @@ export default async function DashboardPage() {
   // ── Upcoming events ──────────────────────────────────────────────────────────
   const upcoming = (upcomingRes.status === "fulfilled" ? (upcomingRes.value.data ?? []) : []) as unknown as UpcomingProject[];
 
+  // ── Service-due assets ───────────────────────────────────────────────────────
+  const serviceDueAssets = (serviceDueRes.status === "fulfilled" ? (serviceDueRes.value.data ?? []) : []) as unknown as ServiceDueAsset[];
+
   return (
     <div className="flex flex-col min-h-screen">
       {/* ── Header ─────────────────────────────────────────────────────────── */}
@@ -173,10 +192,13 @@ export default async function DashboardPage() {
           <AccountsChart invoiceTypes={invoiceTypes} totalOutstanding={totalOutstanding} />
         </div>
 
-        {/* Bottom row — Upcoming Events + Quick Actions */}
+        {/* Bottom row — Upcoming Events + (Service Due + Quick Actions) */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           <UpcomingEvents events={upcoming} />
-          <QuickActions />
+          <div className="flex flex-col gap-5">
+            <ServiceDueWidget assets={serviceDueAssets} />
+            <QuickActions />
+          </div>
         </div>
 
       </main>
