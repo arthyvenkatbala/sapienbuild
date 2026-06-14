@@ -2,49 +2,62 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { Check, FileDown, Loader2, Plus, X } from "lucide-react";
+import { Check, FileDown, Loader2, Plus, Trash2, X } from "lucide-react";
 import { SERVICES } from "@/lib/services";
 import { useToast } from "@/lib/toast";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface LineItemState {
-  id: string;
+  id:          string;
+  name:        string;
+  selected:    boolean;
+  price:       number;
+  events:      string; // number of sessions (legacy field name kept for compat)
+  note:        string;
+  quantity:    number;
+  event_index: number; // which QuoteEvent (0-based) this service belongs to
+}
+
+interface QuoteEvent {
   name: string;
-  selected: boolean;
-  price: number;
-  events: string;
-  note: string;
-  quantity: number;
+  date: string; // free text, e.g. "15 Nov 2025"
 }
 
 interface ProjectShape {
-  id: string;
-  title: string;
-  location: string | null;
+  id:         string;
+  title:      string;
+  location:   string | null;
   event_date: string | null;
   event_type: string | null;
-  contact: { id: string; first_name: string; last_name: string } | null;
+  contact:    { id: string; first_name: string; last_name: string } | null;
 }
 
 interface InvoiceShape {
-  id: string;
-  amount: number;
-  client_name: string | null;
-  location: string | null;
-  event_dates: string | null;
-  events_list: string | null;
-  discount_type: string | null;
+  id:             string;
+  amount:         number;
+  client_name:    string | null;
+  location:       string | null;
+  event_dates:    string | null;
+  events_list:    string | null;
+  discount_type:  string | null;
   discount_value: number | null;
-  discount_note: string | null;
-  line_items: LineItemState[] | null;
+  discount_note:  string | null;
+  line_items:     LineItemState[] | null;
+}
+
+interface DbEvent {
+  id:         string;
+  event_name: string;
+  event_date: string | null;
+  sort_order: number;
 }
 
 export interface QuoteBuilderProps {
-  invoiceId: string;
+  invoiceId:  string;
   projectId?: string | null;
-  onClose: () => void;
-  onSave: () => void;
+  onClose:    () => void;
+  onSave:     () => void;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -63,13 +76,14 @@ function inr(n: number): string {
 
 function defaultItems(): LineItemState[] {
   return SERVICES.map((s) => ({
-    id:       s.id,
-    name:     s.name,
-    selected: !!s.default,
-    price:    s.price,
-    events:   "",
-    note:     "",
-    quantity: 1,
+    id:          s.id,
+    name:        s.name,
+    selected:    !!s.default,
+    price:       s.price,
+    events:      "",
+    note:        "",
+    quantity:    1,
+    event_index: 0,
   }));
 }
 
@@ -92,11 +106,12 @@ export function QuoteBuilder({ invoiceId, projectId, onClose, onSave }: QuoteBui
   const toast = useToast();
 
   // ── Section A ──────────────────────────────────────────────────────────────
-  const [clientName, setClientName] = useState("");
-  const [location,   setLocation]   = useState("");
-  const [eventDates, setEventDates] = useState("");
-  const [eventNames, setEventNames] = useState<string[]>([]);
-  const [newEvent,   setNewEvent]   = useState("");
+  const [clientName,  setClientName]  = useState("");
+  const [location,    setLocation]    = useState("");
+  const [eventDates,  setEventDates]  = useState(""); // overall date range summary
+  const [quoteEvents, setQuoteEvents] = useState<QuoteEvent[]>([{ name: "Event 1", date: "" }]);
+  const [newEvtName,  setNewEvtName]  = useState("");
+  const [newEvtDate,  setNewEvtDate]  = useState("");
 
   // ── Section B ──────────────────────────────────────────────────────────────
   const [lineItems, setLineItems] = useState<LineItemState[]>(defaultItems);
@@ -119,9 +134,10 @@ export function QuoteBuilder({ invoiceId, projectId, onClose, onSave }: QuoteBui
     .reduce((s, i) => s + i.price * (parseInt(i.events) || 1), 0);
 
   const discountAmount = Math.min(discountValue, subtotal);
-  const total = Math.max(0, subtotal - discountAmount);
+  const total          = Math.max(0, subtotal - discountAmount);
 
-  const eventsList = eventNames.map((e, i) => `(${i + 1}) ${e}`).join("  ");
+  // Legacy text representation for events_list column (backward compat)
+  const legacyEventsList = quoteEvents.map((e, i) => `(${i + 1}) ${e.name}`).join("  ");
 
   // ── Load existing data ─────────────────────────────────────────────────────
 
@@ -130,15 +146,20 @@ export function QuoteBuilder({ invoiceId, projectId, onClose, onSave }: QuoteBui
     didLoad.current = true;
     setLoadingData(true);
     try {
-      const reqs: Promise<Response>[] = [fetch(`/api/invoices/${invoiceId}`)];
+      const reqs: Promise<Response>[] = [
+        fetch(`/api/invoices/${invoiceId}`),
+        fetch(`/api/invoices/${invoiceId}/events`),
+      ];
       if (projectId) reqs.push(fetch(`/api/projects/${projectId}`));
-      const responses = await Promise.all(reqs);
-      const [invJson, projJson] = await Promise.all(responses.map((r) => r.json()));
 
-      const inv  = invJson.invoice  as InvoiceShape | null;
-      const proj = projJson?.project as ProjectShape | null;
+      const responses  = await Promise.all(reqs);
+      const [invJson, evtsJson, projJson] = await Promise.all(responses.map((r) => r.json()));
 
-      // Pre-fill from project first, then override with saved invoice values
+      const inv   = invJson.invoice   as InvoiceShape | null;
+      const proj  = (projJson?.project ?? null) as ProjectShape | null;
+      const dbEvts = (evtsJson?.events ?? []) as DbEvent[];
+
+      // Pre-fill from project
       if (proj) {
         const fullName = `${proj.contact?.first_name ?? ""} ${proj.contact?.last_name ?? ""}`.trim();
         setClientName(fullName);
@@ -151,39 +172,62 @@ export function QuoteBuilder({ invoiceId, projectId, onClose, onSave }: QuoteBui
           );
         }
         if (proj.event_type) {
-          setEventNames([proj.event_type.charAt(0).toUpperCase() + proj.event_type.slice(1)]);
+          setQuoteEvents([{
+            name: proj.event_type.charAt(0).toUpperCase() + proj.event_type.slice(1),
+            date: proj.event_date
+              ? new Date(proj.event_date).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })
+              : "",
+          }]);
         }
       }
 
+      // Override with saved invoice values
       if (inv) {
-        if (inv.client_name)   setClientName(inv.client_name);
-        if (inv.location)      setLocation(inv.location);
-        if (inv.event_dates)   setEventDates(inv.event_dates);
-
-        if (inv.events_list) {
-          const matches = inv.events_list.match(/\(\d+\)\s*([^(]+)/g);
-          if (matches) {
-            setEventNames(matches.map((m) => m.replace(/^\(\d+\)\s*/, "").trim()).filter(Boolean));
-          }
-        }
+        if (inv.client_name) setClientName(inv.client_name);
+        if (inv.location)    setLocation(inv.location);
+        if (inv.event_dates) setEventDates(inv.event_dates);
 
         if (inv.discount_value) setDiscountValue(Number(inv.discount_value));
         if (inv.discount_note)  setDiscountNote(inv.discount_note);
 
         if (Array.isArray(inv.line_items) && inv.line_items.length > 0) {
-          // Merge: master list order, override with saved values per id
           setLineItems(
             SERVICES.map((s) => {
               const saved = inv.line_items!.find((l) => l.id === s.id);
               return saved
-                ? { ...saved, name: s.name } // keep master name canonical
+                ? { ...saved, name: s.name, event_index: saved.event_index ?? 0 }
                 : {
                     id: s.id, name: s.name,
-                    selected: !!s.default,
-                    price: s.price,
-                    events: "", note: "", quantity: 1,
+                    selected:    !!s.default,
+                    price:       s.price,
+                    events:      "",
+                    note:        "",
+                    quantity:    1,
+                    event_index: 0,
                   };
             }),
+          );
+        }
+      }
+
+      // Load saved events from DB (takes priority over project defaults)
+      if (dbEvts.length > 0) {
+        setQuoteEvents(
+          dbEvts
+            .sort((a, b) => a.sort_order - b.sort_order)
+            .map((e) => ({ name: e.event_name, date: e.event_date ?? "" })),
+        );
+      } else if (!inv?.events_list && !proj?.event_type) {
+        setQuoteEvents([{ name: "Event 1", date: "" }]);
+      } else if (!dbEvts.length && inv?.events_list) {
+        // Fallback: parse legacy events_list into QuoteEvents
+        const matches = inv.events_list.match(/\(\d+\)\s*([^(]+)/g);
+        if (matches) {
+          setQuoteEvents(
+            matches
+              .map((m) => m.replace(/^\(\d+\)\s*/, "").trim())
+              .filter(Boolean)
+              .map((name) => ({ name, date: "" })),
           );
         }
       }
@@ -203,14 +247,32 @@ export function QuoteBuilder({ invoiceId, projectId, onClose, onSave }: QuoteBui
   };
 
   const addEvent = () => {
-    const t = newEvent.trim();
-    if (!t) return;
-    setEventNames((prev) => [...prev, t]);
-    setNewEvent("");
+    const name = newEvtName.trim();
+    if (!name) return;
+    setQuoteEvents((prev) => [...prev, { name, date: newEvtDate.trim() }]);
+    setNewEvtName("");
+    setNewEvtDate("");
   };
 
-  const removeEvent = (i: number) => {
-    setEventNames((prev) => prev.filter((_, idx) => idx !== i));
+  const removeEvent = (idx: number) => {
+    setQuoteEvents((prev) => {
+      const next = prev.filter((_, i) => i !== idx);
+      // Re-assign line items that pointed to the removed event to event 0
+      setLineItems((items) =>
+        items.map((it) => ({
+          ...it,
+          event_index:
+            it.event_index === idx      ? 0
+            : it.event_index > idx     ? it.event_index - 1
+            : it.event_index,
+        })),
+      );
+      return next;
+    });
+  };
+
+  const updateEvent = (idx: number, patch: Partial<QuoteEvent>) => {
+    setQuoteEvents((prev) => prev.map((e, i) => (i === idx ? { ...e, ...patch } : e)));
   };
 
   // ── Save ───────────────────────────────────────────────────────────────────
@@ -218,6 +280,21 @@ export function QuoteBuilder({ invoiceId, projectId, onClose, onSave }: QuoteBui
   const saveQuote = async (): Promise<boolean> => {
     setSaving(true);
     try {
+      // 1. Persist events (PUT replaces all)
+      const evtRes = await fetch(`/api/invoices/${invoiceId}/events`, {
+        method:  "PUT",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({
+          events: quoteEvents.map((e) => ({ event_name: e.name, event_date: e.date || undefined })),
+        }),
+      });
+      if (!evtRes.ok) {
+        const d = await evtRes.json();
+        toast(d.error ?? "Failed to save events", "error");
+        return false;
+      }
+
+      // 2. Persist invoice (line_items now carry event_index)
       const res = await fetch(`/api/invoices/${invoiceId}`, {
         method:  "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -226,12 +303,12 @@ export function QuoteBuilder({ invoiceId, projectId, onClose, onSave }: QuoteBui
           client_name:    clientName,
           location,
           event_dates:    eventDates,
-          events_list:    eventsList,
+          events_list:    legacyEventsList,
           line_items:     lineItems,
           discount_type:  discountValue > 0 ? "fixed" : "none",
           discount_value: discountValue,
           discount_note:  discountNote,
-          pdf_data:       null, // clear cached PDF so next download regenerates
+          pdf_data:       null,
         }),
       });
       if (!res.ok) {
@@ -264,10 +341,9 @@ export function QuoteBuilder({ invoiceId, projectId, onClose, onSave }: QuoteBui
       const data = await res.json();
       if (!res.ok) { toast(data.error ?? "PDF generation failed", "error"); return; }
 
-      // Trigger browser download
-      const link = document.createElement("a");
-      link.href     = `data:application/pdf;base64,${data.pdf_data}`;
-      link.download = `OTT-Quote-${clientName.replace(/\s+/g, "-") || "Quote"}-${new Date().toISOString().slice(0, 10)}.pdf`;
+      const link      = document.createElement("a");
+      link.href       = `data:application/pdf;base64,${data.pdf_data}`;
+      link.download   = `OTT-Quote-${clientName.replace(/\s+/g, "-") || "Quote"}-${new Date().toISOString().slice(0, 10)}.pdf`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -282,6 +358,8 @@ export function QuoteBuilder({ invoiceId, projectId, onClose, onSave }: QuoteBui
   };
 
   // ── Render ─────────────────────────────────────────────────────────────────
+
+  const multipleEvents = quoteEvents.length > 1;
 
   return (
     <>
@@ -350,7 +428,7 @@ export function QuoteBuilder({ invoiceId, projectId, onClose, onSave }: QuoteBui
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <label className={labelCls}>Event Dates</label>
+                    <label className={labelCls}>Date Range (summary)</label>
                     <input
                       className={inputCls}
                       value={eventDates}
@@ -358,34 +436,60 @@ export function QuoteBuilder({ invoiceId, projectId, onClose, onSave }: QuoteBui
                       placeholder="15 Nov – 17 Nov 2025"
                     />
                   </div>
-                  <div className="sm:col-span-2 space-y-2">
-                    <label className={labelCls}>Events  (each gets a number)</label>
-                    <div className="flex flex-wrap gap-2 mb-2">
-                      {eventNames.map((ev, i) => (
-                        <span
+
+                  {/* Events — each with name + date */}
+                  <div className="sm:col-span-2 space-y-3">
+                    <label className={labelCls}>Events (each gets a PDF section)</label>
+
+                    {/* Existing events */}
+                    <div className="space-y-2">
+                      {quoteEvents.map((ev, i) => (
+                        <div
                           key={i}
-                          className="flex items-center gap-1.5 text-xs bg-yellow-500/10 border border-yellow-500/20 text-yellow-300 px-2.5 py-1 rounded-lg"
+                          className="flex items-center gap-2 bg-yellow-500/[0.04] border border-yellow-500/[0.15] rounded-xl px-3 py-2"
                         >
-                          <span className="text-yellow-500/60 text-[10px]">({i + 1})</span>
-                          {ev}
-                          <button
-                            onClick={() => removeEvent(i)}
-                            className="ml-1 text-yellow-500/50 hover:text-yellow-300 transition-colors"
-                          >
-                            <X size={10} />
-                          </button>
-                        </span>
+                          <span className="text-yellow-500/50 text-[10px] font-bold shrink-0 w-5 text-center">
+                            {i + 1}
+                          </span>
+                          <input
+                            className="flex-1 bg-transparent text-sm text-yellow-200 placeholder:text-yellow-700 outline-none min-w-0"
+                            value={ev.name}
+                            onChange={(e) => updateEvent(i, { name: e.target.value })}
+                            placeholder={`Event ${i + 1}`}
+                          />
+                          <input
+                            className="w-36 bg-transparent text-xs text-zinc-500 placeholder:text-zinc-700 outline-none text-right"
+                            value={ev.date}
+                            onChange={(e) => updateEvent(i, { date: e.target.value })}
+                            placeholder="Date (optional)"
+                          />
+                          {quoteEvents.length > 1 && (
+                            <button
+                              onClick={() => removeEvent(i)}
+                              className="text-zinc-700 hover:text-red-400 transition-colors shrink-0"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          )}
+                        </div>
                       ))}
                     </div>
+
+                    {/* Add event row */}
                     <div className="flex gap-2">
                       <input
                         className={inputCls}
-                        value={newEvent}
-                        onChange={(e) => setNewEvent(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") { e.preventDefault(); addEvent(); }
-                        }}
-                        placeholder="e.g. Reception, Wedding…"
+                        value={newEvtName}
+                        onChange={(e) => setNewEvtName(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addEvent(); } }}
+                        placeholder="Add event, e.g. Reception"
+                      />
+                      <input
+                        className={`${inputCls} w-36 shrink-0`}
+                        value={newEvtDate}
+                        onChange={(e) => setNewEvtDate(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addEvent(); } }}
+                        placeholder="Date"
                       />
                       <button
                         onClick={addEvent}
@@ -394,6 +498,9 @@ export function QuoteBuilder({ invoiceId, projectId, onClose, onSave }: QuoteBui
                         <Plus size={14} />
                       </button>
                     </div>
+                    <p className="text-[10px] text-zinc-600">
+                      Each event appears as a named section in the PDF with its services listed below it — no prices shown.
+                    </p>
                   </div>
                 </div>
               </section>
@@ -437,9 +544,11 @@ export function QuoteBuilder({ invoiceId, projectId, onClose, onSave }: QuoteBui
                               </span>
                             )}
                           </div>
-                          <div className="grid grid-cols-1 sm:grid-cols-[88px_1fr_88px] gap-2">
+
+                          {/* Fields grid — adds "For event" when multiple events exist */}
+                          <div className={`grid gap-2 ${multipleEvents ? "grid-cols-1 sm:grid-cols-[72px_1fr_80px_1fr]" : "grid-cols-1 sm:grid-cols-[88px_1fr_88px]"}`}>
                             <div className="space-y-1">
-                              <label className={labelCls}>No. of sessions</label>
+                              <label className={labelCls}>Sessions</label>
                               <input
                                 type="number"
                                 className={inlineCls + " text-right"}
@@ -472,6 +581,25 @@ export function QuoteBuilder({ invoiceId, projectId, onClose, onSave }: QuoteBui
                                 }
                               />
                             </div>
+                            {multipleEvents && (
+                              <div className="space-y-1">
+                                <label className={labelCls}>For event</label>
+                                <select
+                                  className={inlineCls + " cursor-pointer"}
+                                  value={item.event_index}
+                                  disabled={!item.selected}
+                                  onChange={(e) =>
+                                    updateItem(item.id, { event_index: Number(e.target.value) })
+                                  }
+                                >
+                                  {quoteEvents.map((ev, i) => (
+                                    <option key={i} value={i}>
+                                      {ev.name || `Event ${i + 1}`}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -517,14 +645,28 @@ export function QuoteBuilder({ invoiceId, projectId, onClose, onSave }: QuoteBui
                     </p>
                   ) : (
                     <>
-                      {lineItems.filter((i) => i.selected).map((item) => (
-                        <div key={item.id} className="flex items-center justify-between text-xs gap-2">
-                          <span className="text-zinc-400 truncate">{item.name}</span>
-                          <span className="text-zinc-300 shrink-0 tabular-nums">
-                            {inr(item.price * (parseInt(item.events) || 1))}
-                          </span>
-                        </div>
-                      ))}
+                      {/* Group by event */}
+                      {quoteEvents.map((ev, evIdx) => {
+                        const evItems = lineItems.filter((i) => i.selected && i.event_index === evIdx);
+                        if (!evItems.length) return null;
+                        return (
+                          <div key={evIdx}>
+                            {multipleEvents && (
+                              <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-600 mb-1 mt-2">
+                                {ev.name || `Event ${evIdx + 1}`}
+                              </p>
+                            )}
+                            {evItems.map((item) => (
+                              <div key={item.id} className="flex items-center justify-between text-xs gap-2 py-0.5">
+                                <span className="text-zinc-400 truncate">{item.name}</span>
+                                <span className="text-zinc-300 shrink-0 tabular-nums">
+                                  {inr(item.price * (parseInt(item.events) || 1))}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })}
                       <div className="border-t border-white/[0.06] pt-2.5 space-y-1.5">
                         <div className="flex justify-between text-xs">
                           <span className="text-zinc-500">Subtotal</span>
@@ -533,12 +675,9 @@ export function QuoteBuilder({ invoiceId, projectId, onClose, onSave }: QuoteBui
                         {discountAmount > 0 && (
                           <div className="flex justify-between text-xs">
                             <span className="text-zinc-500">
-                              Discount
-                              {discountNote ? ` (${discountNote})` : ""}
+                              Discount{discountNote ? ` (${discountNote})` : ""}
                             </span>
-                            <span className="text-red-400 tabular-nums">
-                              −{inr(discountAmount)}
-                            </span>
+                            <span className="text-red-400 tabular-nums">−{inr(discountAmount)}</span>
                           </div>
                         )}
                         <div className="flex justify-between border-t border-white/[0.06] pt-2">
@@ -564,7 +703,7 @@ export function QuoteBuilder({ invoiceId, projectId, onClose, onSave }: QuoteBui
             {lineItems.some((i) => i.selected) && (
               <div className="px-6 py-3 bg-[#0d0d10] border-b border-white/[0.05] space-y-1.5">
                 <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-600 mb-2">
-                  {lineItems.filter((i) => i.selected).length} service{lineItems.filter((i) => i.selected).length !== 1 ? "s" : ""} selected
+                  {lineItems.filter((i) => i.selected).length} service{lineItems.filter((i) => i.selected).length !== 1 ? "s" : ""} · {quoteEvents.length} event{quoteEvents.length !== 1 ? "s" : ""}
                 </p>
                 <div className="flex justify-between text-xs">
                   <span className="text-zinc-500">Subtotal</span>

@@ -7,13 +7,21 @@ import { adminSupabase } from "@/lib/supabase-admin";
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface LineItem {
-  id: string;
-  name: string;
-  selected: boolean;
-  price: number;
-  events: string;
-  note: string;
-  quantity: number;
+  id:          string;
+  name:        string;
+  selected:    boolean;
+  price:       number;
+  events:      string; // session count
+  note:        string;
+  quantity:    number;
+  event_index: number; // 0-based index into invoice_events (sort_order - 1)
+}
+
+interface DbEvent {
+  id:         string;
+  event_name: string;
+  event_date: string | null;
+  sort_order: number;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -48,7 +56,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
     }
 
-    // 2. Read template PDF
+    // 2. Fetch events for this invoice (sorted by sort_order)
+    const { data: rawEvents } = await adminSupabase
+      .from("invoice_events")
+      .select("id, event_name, event_date, sort_order")
+      .eq("invoice_id", invoice_id)
+      .order("sort_order", { ascending: true });
+
+    const dbEvents: DbEvent[] = rawEvents ?? [];
+
+    // 3. Read template PDF
     const templatePath = join(
       process.cwd(),
       "public",
@@ -57,18 +74,19 @@ export async function POST(request: NextRequest) {
     );
     const templateBytes = await readFile(templatePath);
 
-    // 3. Load PDF
+    // 4. Load PDF
     const pdfDoc = await PDFDocument.load(templateBytes);
 
-    // 4. Embed standard fonts (Helvetica — Latin-1 encoding, ₹ not available)
+    // 5. Embed standard fonts (Helvetica — Latin-1 encoding)
     const boldFont: PDFFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
     const regFont:  PDFFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
 
-    // 5. Target ONLY page 4 (index 3) — never touch other pages
+    // 6. Target ONLY page 4 (index 3) — never touch other pages
     const page = pdfDoc.getPage(3);
 
-    const dark = rgb(0.102, 0.102, 0.102); // #1a1a1a — matches template body text
-    const grey = rgb(0.4,   0.4,   0.4);   // #666666 — for service notes
+    const dark   = rgb(0.102, 0.102, 0.102); // #1a1a1a
+    const grey   = rgb(0.4,   0.4,   0.4);   // #666666
+    const silver = rgb(0.55,  0.55,  0.55);  // event date / separator
 
     function drawAt(
       text: string,
@@ -82,9 +100,8 @@ export async function POST(request: NextRequest) {
       page.drawText(text, { x, y, font, size, color });
     }
 
-    // ── Write dynamic content into the template's blank areas ────────────────
+    // ── CLIENT / EVENT HEADER ────────────────────────────────────────────────
 
-    // CLIENT NAME
     const contact  = invoice.contact as { first_name?: string; last_name?: string } | null;
     const fullName = `${contact?.first_name ?? ""} ${contact?.last_name ?? ""}`.trim();
     const savedName = invoice.client_name as string | null;
@@ -92,67 +109,112 @@ export async function POST(request: NextRequest) {
 
     drawAt(clientName, 45, 735, boldFont, 14);
 
-    // LOCATION
     const loc =
       (invoice.location as string | null) ??
       (invoice.project as { location?: string | null } | null)?.location ??
       "";
     if (loc) drawAt(`Location:  ${loc}`, 45, 718, regFont, 10);
 
-    // DATES
     const eventDates = invoice.event_dates as string | null;
     if (eventDates) drawAt(`Dates:      ${eventDates}`, 45, 704, regFont, 10);
 
-    // EVENTS LIST
-    const eventsList = invoice.events_list as string | null;
-    if (eventsList) drawAt(`Events :   ${eventsList}`, 45, 690, regFont, 10);
-
-    // ── SERVICE LINE ITEMS ───────────────────────────────────────────────────
+    // ── SERVICE SECTIONS — grouped by event, no per-service prices ───────────
 
     const rawItems = invoice.line_items as LineItem[] | null;
     const selected = Array.isArray(rawItems)
       ? rawItems.filter((i) => i.selected)
       : [];
 
-    let cy = 620;
+    // Determine events to render.
+    // If no DB events saved (old quote), create a synthetic "Event 1" bucket.
+    const events: DbEvent[] =
+      dbEvents.length > 0
+        ? dbEvents
+        : [{ id: "default", event_name: "Services", event_date: null, sort_order: 1 }];
 
-    for (const item of selected) {
-      if (cy < 490) break; // stop before the template paragraph text
+    let cy = 665; // top of services area — below the header block
 
-      // Service name — left
-      drawAt(item.name, 45, cy, boldFont, 10);
+    for (let evIdx = 0; evIdx < events.length; evIdx++) {
+      if (cy < 185) break; // leave space for discount + total
 
-      // Note below name (grey, smaller)
-      const hasNote = !!item.note?.trim();
-      if (hasNote) {
-        drawAt(item.note.trim(), 45, cy - 11, regFont, 9, grey);
+      const ev = events[evIdx];
+
+      // Which line items belong to this event?
+      // Old line items (no event_index) all fall to event 0.
+      const evItems = selected.filter((item) => (item.event_index ?? 0) === evIdx);
+      if (!evItems.length) continue; // skip empty events
+
+      // ── Event separator line ────────────────────────────────────────────
+      page.drawLine({
+        start:     { x: 45,  y: cy + 3 },
+        end:       { x: 530, y: cy + 3 },
+        thickness: 0.5,
+        color:     silver,
+        dashArray: [3, 3],
+      });
+      cy -= 2;
+
+      // ── Event name ──────────────────────────────────────────────────────
+      drawAt(ev.event_name.toUpperCase(), 45, cy - 12, boldFont, 10);
+      cy -= 12;
+
+      // Event date (if set), in grey, inline after name
+      if (ev.event_date) {
+        const nameWidth = boldFont.widthOfTextAtSize(ev.event_name.toUpperCase(), 10);
+        drawAt(`   ${ev.event_date}`, 45 + nameWidth, cy, regFont, 9, silver);
+      }
+      cy -= 16; // gap below event heading
+
+      // ── Service names (no prices) ────────────────────────────────────────
+      for (const item of evItems) {
+        if (cy < 185) break;
+
+        const hasNote = !!item.note?.trim();
+
+        // Bullet + service name
+        drawAt(`•  ${item.name}`, 52, cy, regFont, 10);
+
+        // Optional note (grey, smaller)
+        if (hasNote) {
+          drawAt(item.note.trim(), 64, cy - 11, regFont, 9, grey);
+        }
+
+        cy -= hasNote ? 26 : 15;
       }
 
-      // Calculated line amount — right-aligned
-      const sessions = parseInt(item.events) || 1;
-      const lineAmt  = item.price * sessions;
-      const amtText  = `INR ${inrNumber(lineAmt)}`;
-      const amtWidth = boldFont.widthOfTextAtSize(amtText, 10);
-      drawAt(amtText, 530 - amtWidth, cy, boldFont, 10);
-
-      cy -= hasNote ? 28 : 18;
+      cy -= 10; // gap between event sections
     }
 
-    // ── TOTAL COST ───────────────────────────────────────────────────────────
-    const total     = Number(invoice.amount) || 0;
-    const totalText = `Total cost = INR ${inrNumber(total)}`;
-    drawAt(totalText, 45, 158, boldFont, 13);
+    // ── DISCOUNT + TOTAL ─────────────────────────────────────────────────────
 
-    // 6. Serialise
+    const total          = Number(invoice.amount) || 0;
+    const discountValue  = Number(invoice.discount_value) || 0;
+    const discountNote   = (invoice.discount_note as string | null) ?? "";
+
+    // Position: if we have space, use the current cy; otherwise anchor to fixed positions
+    const discountY = discountValue > 0 ? 185 : 170;
+    const totalY    = 158;
+
+    if (discountValue > 0) {
+      const discLabel = discountNote
+        ? `Discount (${discountNote}):  -INR ${inrNumber(discountValue)}`
+        : `Discount:  -INR ${inrNumber(discountValue)}`;
+      drawAt(discLabel, 45, discountY, regFont, 10, grey);
+    }
+
+    const totalText = `Total cost = INR ${inrNumber(total)}`;
+    drawAt(totalText, 45, totalY, boldFont, 13);
+
+    // 7. Serialise
     const pdfBytes = await pdfDoc.save();
     const base64   = Buffer.from(pdfBytes).toString("base64");
 
-    // 7. Invoice number: QT-YYYY-XXXXXX
+    // 8. Invoice number: QT-YYYY-XXXXXX
     const year      = new Date().getFullYear();
     const shortId   = invoice_id.replace(/-/g, "").slice(-6).toUpperCase();
     const invoiceNo = `QT-${year}-${shortId}`;
 
-    // 8. Persist in DB
+    // 9. Persist in DB
     await adminSupabase
       .from("invoices")
       .update({ pdf_data: base64, invoice_number: invoiceNo })
