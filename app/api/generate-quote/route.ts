@@ -185,25 +185,33 @@ export async function POST(request: NextRequest) {
       cy -= 10; // gap between event sections
     }
 
-    // ── DISCOUNT + TOTAL ─────────────────────────────────────────────────────
+    // ── DISCOUNT + TOTAL — placed right below the last service line ───────────
 
-    const total          = Number(invoice.amount) || 0;
-    const discountValue  = Number(invoice.discount_value) || 0;
-    const discountNote   = (invoice.discount_note as string | null) ?? "";
+    const total         = Number(invoice.amount) || 0;
+    const discountValue = Number(invoice.discount_value) || 0;
+    const discountNote  = (invoice.discount_note as string | null) ?? "";
 
-    // Position: if we have space, use the current cy; otherwise anchor to fixed positions
-    const discountY = discountValue > 0 ? 185 : 170;
-    const totalY    = 158;
+    // Thin separator above the total block
+    const sepY = cy - 4;
+    page.drawLine({
+      start:     { x: 45,  y: sepY },
+      end:       { x: 530, y: sepY },
+      thickness: 0.5,
+      color:     silver,
+    });
+
+    let totalCy = sepY - 18; // start writing just below the separator
 
     if (discountValue > 0) {
       const discLabel = discountNote
         ? `Discount (${discountNote}):  -INR ${inrNumber(discountValue)}`
         : `Discount:  -INR ${inrNumber(discountValue)}`;
-      drawAt(discLabel, 45, discountY, regFont, 10, grey);
+      drawAt(discLabel, 45, totalCy, regFont, 10, grey);
+      totalCy -= 18;
     }
 
     const totalText = `Total cost = INR ${inrNumber(total)}`;
-    drawAt(totalText, 45, totalY, boldFont, 13);
+    drawAt(totalText, 45, totalCy, boldFont, 13);
 
     // 7. Serialise
     const pdfBytes = await pdfDoc.save();

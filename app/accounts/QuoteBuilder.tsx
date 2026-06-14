@@ -438,54 +438,55 @@ export function QuoteBuilder({ invoiceId, projectId, onClose, onSave }: QuoteBui
                   </div>
 
                   {/* Events — each with name + date */}
-                  <div className="sm:col-span-2 space-y-3">
+                  <div className="sm:col-span-2 space-y-2">
                     <label className={labelCls}>Events (each gets a PDF section)</label>
 
-                    {/* Existing events */}
-                    <div className="space-y-2">
-                      {quoteEvents.map((ev, i) => (
-                        <div
-                          key={i}
-                          className="flex items-center gap-2 bg-yellow-500/[0.04] border border-yellow-500/[0.15] rounded-xl px-3 py-2"
-                        >
-                          <span className="text-yellow-500/50 text-[10px] font-bold shrink-0 w-5 text-center">
-                            {i + 1}
-                          </span>
-                          <input
-                            className="flex-1 bg-transparent text-sm text-yellow-200 placeholder:text-yellow-700 outline-none min-w-0"
-                            value={ev.name}
-                            onChange={(e) => updateEvent(i, { name: e.target.value })}
-                            placeholder={`Event ${i + 1}`}
-                          />
-                          <input
-                            className="w-36 bg-transparent text-xs text-zinc-500 placeholder:text-zinc-700 outline-none text-right"
-                            value={ev.date}
-                            onChange={(e) => updateEvent(i, { date: e.target.value })}
-                            placeholder="Date (optional)"
-                          />
-                          {quoteEvents.length > 1 && (
-                            <button
-                              onClick={() => removeEvent(i)}
-                              className="text-zinc-700 hover:text-red-400 transition-colors shrink-0"
-                            >
-                              <Trash2 size={13} />
-                            </button>
-                          )}
-                        </div>
-                      ))}
-                    </div>
+                    {/* Existing events — inline editable */}
+                    {quoteEvents.map((ev, i) => (
+                      <div
+                        key={i}
+                        className="flex items-center gap-2 bg-yellow-500/[0.04] border border-yellow-500/[0.15] rounded-xl px-3 py-2"
+                      >
+                        <span className="text-yellow-500/50 text-[10px] font-bold shrink-0 w-5 text-center">
+                          {i + 1}
+                        </span>
+                        <input
+                          className="min-w-0 flex-1 bg-transparent text-sm text-yellow-200 placeholder:text-yellow-600 outline-none"
+                          value={ev.name}
+                          onChange={(e) => updateEvent(i, { name: e.target.value })}
+                          placeholder={`Event ${i + 1} name`}
+                        />
+                        <input
+                          className="w-32 shrink-0 bg-transparent text-xs text-zinc-500 placeholder:text-zinc-700 outline-none text-right"
+                          value={ev.date}
+                          onChange={(e) => updateEvent(i, { date: e.target.value })}
+                          placeholder="Date (optional)"
+                        />
+                        {quoteEvents.length > 1 && (
+                          <button
+                            onClick={() => removeEvent(i)}
+                            className="text-zinc-700 hover:text-red-400 transition-colors shrink-0 ml-1"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        )}
+                      </div>
+                    ))}
 
-                    {/* Add event row */}
-                    <div className="flex gap-2">
+                    {/* Add new event — fixed layout */}
+                    <div className="flex items-center gap-2 border border-dashed border-white/[0.08] rounded-xl px-3 py-2">
+                      <span className="text-zinc-700 text-[10px] font-bold shrink-0 w-5 text-center">
+                        {quoteEvents.length + 1}
+                      </span>
                       <input
-                        className={inputCls}
+                        className="min-w-0 flex-1 bg-transparent text-sm text-zinc-300 placeholder:text-zinc-600 outline-none"
                         value={newEvtName}
                         onChange={(e) => setNewEvtName(e.target.value)}
                         onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addEvent(); } }}
-                        placeholder="Add event, e.g. Reception"
+                        placeholder="New event name (e.g. Reception)"
                       />
                       <input
-                        className={`${inputCls} w-36 shrink-0`}
+                        className="w-32 shrink-0 bg-transparent text-xs text-zinc-500 placeholder:text-zinc-700 outline-none text-right"
                         value={newEvtDate}
                         onChange={(e) => setNewEvtDate(e.target.value)}
                         onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addEvent(); } }}
@@ -493,13 +494,14 @@ export function QuoteBuilder({ invoiceId, projectId, onClose, onSave }: QuoteBui
                       />
                       <button
                         onClick={addEvent}
-                        className="shrink-0 px-3 py-2 rounded-xl bg-yellow-600/80 hover:bg-yellow-600 text-white transition-all"
+                        className="shrink-0 ml-1 w-7 h-7 rounded-lg bg-yellow-600/80 hover:bg-yellow-600 text-white transition-all flex items-center justify-center"
                       >
-                        <Plus size={14} />
+                        <Plus size={13} />
                       </button>
                     </div>
-                    <p className="text-[10px] text-zinc-600">
-                      Each event appears as a named section in the PDF with its services listed below it — no prices shown.
+
+                    <p className="text-[10px] text-zinc-600 pt-0.5">
+                      Each event becomes a section in the PDF listing its services — no prices shown.
                     </p>
                   </div>
                 </div>
