@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminSupabase } from "@/lib/supabase-admin";
+import { bookCalendarForProject } from "@/lib/calendar";
 
 const FULL_SELECT = `
   id, type, status, amount, due_date, notes, line_items,
@@ -88,6 +89,29 @@ export async function PATCH(
         .update({ type: "client" })
         .eq("id", contactId)
         .eq("type", "lead");
+    }
+  }
+
+  // When a *quote* transitions to "sent", trigger Google Calendar booking
+  if (update.status === "sent" && data?.type === "quote") {
+    const projectRaw = data.project as unknown;
+    const project = Array.isArray(projectRaw) ? projectRaw[0] : projectRaw;
+    const projectId = (project as { id?: string } | null)?.id;
+
+    if (projectId) {
+      // Fire-and-forget: don't block the response if calendar is not connected
+      bookCalendarForProject(projectId)
+        .then((result) => {
+          if (result.booked > 0) {
+            adminSupabase.from("workflow_events").insert([{
+              project_id: projectId,
+              from_stage: null,
+              to_stage:   "quote_sent",
+              notes:      `Quote sent · Calendar: ${result.booked} team event(s) synced`,
+            }]).then(() => {}, () => {});
+          }
+        })
+        .catch((e) => console.error("[invoice PATCH] Calendar booking error:", e));
     }
   }
 

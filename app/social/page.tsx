@@ -1,12 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Loader2, ChevronDown, ChevronUp, Lightbulb, Check, X,
   Send, Clock, Image, Film, Globe,
-  Camera, PlayCircle, Plus, Eye, EyeOff,
-  History, Sparkles, Settings,
+  Camera, PlayCircle, Sparkles, Settings, AlertTriangle,
+  RotateCcw, ThumbsDown, Pencil,
 } from "lucide-react";
 import Link from "next/link";
 import { useToast } from "@/lib/toast";
@@ -19,7 +19,7 @@ interface Suggestion {
   day_of_week:         number;
   content_type:        "post" | "reel";
   drive_file_id:       string;
-  drive_file_name:     string;
+  drive_file_name:     string | null;
   drive_file_url:      string | null;
   drive_thumbnail_url: string | null;
   caption:             string;
@@ -27,22 +27,34 @@ interface Suggestion {
   suggested_time:      string;
   suggested_day_label: string;
   platforms:           string[];
-  posting_reason:      string;
-  content_theme:       string;
-  status:              "pending" | "approved" | "edited" | "skipped" | "posted";
+  posting_reason:      string | null;
+  content_theme:       string | null;
+  status:              "pending" | "approved" | "edited" | "skipped" | "posted" | "rejected";
   approved_at:         string | null;
   caption_edited:      string | null;
   posted_at:           string | null;
   facebook_post_id:    string | null;
   youtube_video_id:    string | null;
+  rejected_at:         string | null;
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+interface AgentRun {
+  id:           string;
+  status:       "running" | "completed" | "failed";
+  generated_by: "cron" | "manual";
+  created_at:   string;
+  error_message?: string | null;
+  suggestions_generated?: number;
+}
+
+type FilterTab = "pending" | "approved" | "posted" | "rejected";
+
+// ─── Constants ────────────────────────────────────────────────────────────────
 
 const PLATFORM_ICONS: Record<string, React.ReactNode> = {
-  facebook:  <Globe       size={10} className="text-blue-400" />,
-  instagram: <Camera      size={10} className="text-pink-400" />,
-  youtube:   <PlayCircle  size={10} className="text-red-400" />,
+  facebook:  <Globe      size={10} className="text-blue-400"  />,
+  instagram: <Camera     size={10} className="text-pink-400"  />,
+  youtube:   <PlayCircle size={10} className="text-red-400"   />,
 };
 
 const STATUS_BADGE: Record<string, string> = {
@@ -51,6 +63,7 @@ const STATUS_BADGE: Record<string, string> = {
   edited:   "bg-blue-500/20 text-blue-400 border-blue-500/30",
   skipped:  "bg-zinc-700/30 text-zinc-600 border-zinc-700/30",
   posted:   "bg-green-500/20 text-green-400 border-green-500/30",
+  rejected: "bg-red-500/20 text-red-400 border-red-500/30",
 };
 
 const THEME_COLORS: Record<string, string> = {
@@ -63,40 +76,32 @@ const THEME_COLORS: Record<string, string> = {
   getting_ready: "bg-blue-500/15 text-blue-400 border-blue-500/25",
 };
 
-function getMondayLabel(): string {
-  const now = new Date();
-  const day  = now.getDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  const monday = new Date(now);
-  monday.setDate(now.getDate() + diff);
-  return monday.toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" });
-}
+const FILTER_TABS: Array<{ id: FilterTab; label: string; statusIn: string }> = [
+  { id: "pending",  label: "Pending Review", statusIn: "pending"           },
+  { id: "approved", label: "Approved",       statusIn: "approved,edited"   },
+  { id: "posted",   label: "Posted",         statusIn: "posted"            },
+  { id: "rejected", label: "Rejected",       statusIn: "rejected,skipped"  },
+];
 
-function getMondayDate(): string {
-  const now  = new Date();
-  const day  = now.getDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  const monday = new Date(now);
-  monday.setDate(now.getDate() + diff);
-  return monday.toISOString().slice(0, 10);
-}
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatIST(iso: string): string {
   return new Date(iso).toLocaleString("en-IN", {
-    timeZone:  "Asia/Kolkata",
-    day:       "numeric",
-    month:     "short",
-    hour:      "2-digit",
-    minute:    "2-digit",
+    timeZone: "Asia/Kolkata",
+    day:      "numeric",
+    month:    "short",
+    hour:     "2-digit",
+    minute:   "2-digit",
   });
 }
 
-const DAY_FULL: Record<number, string> = {
-  1: "Monday", 2: "Tuesday", 3: "Wednesday",
-  4: "Thursday", 5: "Friday", 6: "Saturday", 7: "Sunday",
-};
+function sourceLabel(filename: string | null): string {
+  if (!filename) return "";
+  // Strip extension and common timestamp suffixes for a cleaner label
+  return filename.replace(/\.\w{2,4}$/, "").replace(/_\d{8,}$/, "").replace(/_/g, " ");
+}
 
-// ─── Caption Editor ───────────────────────────────────────────────────────────
+// ─── Caption Editor (inline) ──────────────────────────────────────────────────
 
 function CaptionEditor({
   suggestion,
@@ -104,8 +109,8 @@ function CaptionEditor({
   onClose,
 }: {
   suggestion: Suggestion;
-  onSave: (id: string, caption: string) => Promise<void>;
-  onClose: () => void;
+  onSave:     (id: string, caption: string, hashtags: string[]) => Promise<void>;
+  onClose:    () => void;
 }) {
   const [caption,  setCaption]  = useState(suggestion.caption_edited ?? suggestion.caption);
   const [hashtags, setHashtags] = useState<string[]>(suggestion.hashtags ?? []);
@@ -114,17 +119,22 @@ function CaptionEditor({
 
   const save = async () => {
     setSaving(true);
-    const full = `${caption}\n\n${hashtags.join(" ")}`;
-    await onSave(suggestion.id, full);
+    await onSave(suggestion.id, caption, hashtags);
     setSaving(false);
     onClose();
   };
 
+  const addTag = () => {
+    const tag = newTag.trim().startsWith("#") ? newTag.trim() : `#${newTag.trim()}`;
+    if (tag !== "#" && !hashtags.includes(tag)) setHashtags((t) => [...t, tag]);
+    setNewTag("");
+  };
+
   return (
     <motion.div
-      initial={{ opacity: 0, y: 8 }}
+      initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: 8 }}
+      exit={{ opacity: 0, y: 6 }}
       className="mt-3 p-4 bg-[#0d0d10] border border-white/[0.1] rounded-xl space-y-3"
     >
       <textarea
@@ -133,6 +143,7 @@ function CaptionEditor({
         value={caption}
         onChange={(e) => setCaption(e.target.value)}
       />
+
       <div>
         <p className="text-[10px] text-zinc-600 mb-2 uppercase tracking-widest font-semibold">Hashtags</p>
         <div className="flex flex-wrap gap-1.5 mb-2">
@@ -151,19 +162,16 @@ function CaptionEditor({
             placeholder="#NewTag"
             value={newTag}
             onChange={(e) => setNewTag(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                const tag = newTag.trim().startsWith("#") ? newTag.trim() : `#${newTag.trim()}`;
-                if (tag !== "#") setHashtags((t) => [...t, tag]);
-                setNewTag("");
-              }
-            }}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addTag(); } }}
           />
         </div>
       </div>
+
       <div className="flex gap-2 pt-1">
-        <button onClick={onClose} className="flex-1 py-2 rounded-xl border border-white/[0.07] text-xs text-zinc-500 hover:text-white transition-all">
+        <button
+          onClick={onClose}
+          className="flex-1 py-2 rounded-xl border border-white/[0.07] text-xs text-zinc-500 hover:text-white transition-all"
+        >
           Cancel
         </button>
         <button
@@ -172,7 +180,7 @@ function CaptionEditor({
           className="flex-1 py-2 rounded-xl bg-pink-600 hover:bg-pink-500 disabled:opacity-50 text-xs font-medium text-white transition-all flex items-center justify-center gap-1"
         >
           {saving ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
-          Save & Approve
+          Save &amp; Approve
         </button>
       </div>
     </motion.div>
@@ -184,22 +192,22 @@ function CaptionEditor({
 function SuggestionCard({
   suggestion,
   onApprove,
-  onSkip,
+  onReject,
   onRestore,
   onPostNow,
   onEditSave,
 }: {
-  suggestion:  Suggestion;
-  onApprove:   (id: string) => Promise<void>;
-  onSkip:      (id: string) => Promise<void>;
-  onRestore:   (id: string) => Promise<void>;
-  onPostNow:   (id: string, captionOverride?: string) => Promise<void>;
-  onEditSave:  (id: string, caption: string) => Promise<void>;
+  suggestion: Suggestion;
+  onApprove:  (id: string) => Promise<void>;
+  onReject:   (id: string) => Promise<void>;
+  onRestore:  (id: string) => Promise<void>;
+  onPostNow:  (id: string) => Promise<void>;
+  onEditSave: (id: string, caption: string, hashtags: string[]) => Promise<void>;
 }) {
-  const [showReason,   setShowReason]   = useState(false);
-  const [showCaption,  setShowCaption]  = useState(false);
-  const [showEditor,   setShowEditor]   = useState(false);
-  const [actioning,    setActioning]    = useState<string | null>(null);
+  const [showReason,  setShowReason]  = useState(false);
+  const [showCaption, setShowCaption] = useState(false);
+  const [showEditor,  setShowEditor]  = useState(false);
+  const [actioning,   setActioning]   = useState<string | null>(null);
 
   const act = async (label: string, fn: () => Promise<void>) => {
     setActioning(label);
@@ -212,23 +220,27 @@ function SuggestionCard({
   const visibleCaption = showCaption ? displayCaption : displayCaption.slice(0, 120) + (truncated ? "…" : "");
   const theme          = THEME_COLORS[suggestion.content_theme ?? ""] ?? "bg-zinc-500/15 text-zinc-400 border-zinc-500/25";
 
+  const isRejected = suggestion.status === "rejected" || suggestion.status === "skipped";
+  const isPosted   = suggestion.status === "posted";
+  const isApproved = suggestion.status === "approved" || suggestion.status === "edited";
+  const isPending  = suggestion.status === "pending";
+
+  const source = sourceLabel(suggestion.drive_file_name);
+
   return (
     <div className={`bg-[#111114] border rounded-2xl p-4 transition-all ${
-      suggestion.status === "skipped"  ? "opacity-50 border-white/[0.04]" :
-      suggestion.status === "posted"   ? "border-green-500/20" :
-      suggestion.status === "approved" ? "border-amber-500/20" :
+      isRejected  ? "opacity-50 border-red-500/10" :
+      isPosted    ? "border-green-500/20"           :
+      isApproved  ? "border-amber-500/20"           :
       "border-white/[0.07]"
     }`}>
       <div className="flex gap-3">
+
         {/* Thumbnail */}
         <div className="w-20 h-20 shrink-0 rounded-xl overflow-hidden bg-white/[0.03] border border-white/[0.06] flex items-center justify-center">
           {suggestion.drive_thumbnail_url ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={suggestion.drive_thumbnail_url}
-              alt={suggestion.drive_file_name}
-              className="w-full h-full object-cover"
-            />
+            <img src={suggestion.drive_thumbnail_url} alt={suggestion.drive_file_name ?? ""} className="w-full h-full object-cover" />
           ) : (
             <div className="text-zinc-700">
               {suggestion.content_type === "post" ? <Image size={22} /> : <Film size={22} />}
@@ -237,11 +249,11 @@ function SuggestionCard({
         </div>
 
         {/* Content */}
-        <div className="flex-1 min-w-0 space-y-2">
-          {/* Top row */}
+        <div className="flex-1 min-w-0 space-y-1.5">
+          {/* Metadata row */}
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="flex items-center gap-1 text-[9px] font-semibold px-1.5 py-0.5 rounded bg-white/[0.06] text-zinc-400">
-              <Clock size={8} /> {suggestion.suggested_time}
+              <Clock size={8} /> {suggestion.suggested_time} · {suggestion.suggested_day_label}
             </span>
             <span className={`flex items-center gap-1 text-[9px] font-semibold px-1.5 py-0.5 rounded ${
               suggestion.content_type === "post"
@@ -249,12 +261,10 @@ function SuggestionCard({
                 : "bg-purple-500/15 text-purple-400"
             }`}>
               {suggestion.content_type === "post" ? <Image size={8} /> : <Film size={8} />}
-              {suggestion.content_type === "post" ? "Post" : "Reel"}
+              {suggestion.content_type === "post" ? "Photo Post" : "Reel"}
             </span>
             <div className="flex items-center gap-0.5">
-              {(suggestion.platforms ?? []).map((p) => (
-                <span key={p} title={p}>{PLATFORM_ICONS[p]}</span>
-              ))}
+              {(suggestion.platforms ?? []).map((p) => <span key={p} title={p}>{PLATFORM_ICONS[p]}</span>)}
             </div>
             {suggestion.content_theme && (
               <span className={`text-[9px] font-medium px-1.5 py-0.5 rounded-full border capitalize ${theme}`}>
@@ -262,15 +272,23 @@ function SuggestionCard({
               </span>
             )}
             <span className={`ml-auto text-[9px] font-semibold px-2 py-0.5 rounded-full border ${STATUS_BADGE[suggestion.status]}`}>
-              {suggestion.status === "posted" ? "Posted ✓" : suggestion.status.charAt(0).toUpperCase() + suggestion.status.slice(1)}
+              {suggestion.status === "posted"   ? "Posted ✓"   :
+               suggestion.status === "rejected" ? "Rejected"   :
+               suggestion.status === "skipped"  ? "Rejected"   :
+               suggestion.status.charAt(0).toUpperCase() + suggestion.status.slice(1)}
             </span>
           </div>
 
+          {/* Source */}
+          {source && (
+            <p className="text-[9px] text-zinc-600 truncate">
+              Source: {source}
+            </p>
+          )}
+
           {/* Caption */}
           <div>
-            <p className="text-xs text-zinc-300 leading-relaxed">
-              {visibleCaption}
-            </p>
+            <p className="text-xs text-zinc-300 leading-relaxed">{visibleCaption}</p>
             {truncated && (
               <button
                 onClick={() => setShowCaption((v) => !v)}
@@ -285,9 +303,7 @@ function SuggestionCard({
           {suggestion.hashtags?.length > 0 && (
             <div className="flex flex-wrap gap-1">
               {suggestion.hashtags.slice(0, 5).map((h) => (
-                <span key={h} className="text-[9px] px-1.5 py-0.5 rounded-full bg-pink-500/8 text-pink-400/70">
-                  {h}
-                </span>
+                <span key={h} className="text-[9px] px-1.5 py-0.5 rounded-full bg-pink-500/8 text-pink-400/70">{h}</span>
               ))}
               {suggestion.hashtags.length > 5 && (
                 <span className="text-[9px] text-zinc-600">+{suggestion.hashtags.length - 5} more</span>
@@ -295,7 +311,7 @@ function SuggestionCard({
             </div>
           )}
 
-          {/* AI Reason */}
+          {/* AI reason */}
           {suggestion.posting_reason && (
             <div>
               <button
@@ -303,7 +319,7 @@ function SuggestionCard({
                 className="flex items-center gap-1 text-[10px] text-zinc-600 hover:text-zinc-400 transition-colors"
               >
                 <Lightbulb size={10} />
-                {showReason ? "Hide reason" : "Why this was selected"}
+                {showReason ? "Hide reason" : "Why selected"}
                 {showReason ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
               </button>
               {showReason && (
@@ -314,19 +330,22 @@ function SuggestionCard({
             </div>
           )}
 
-          {/* Posted time */}
-          {suggestion.status === "posted" && suggestion.posted_at && (
-            <p className="text-[10px] text-green-400">
-              Posted {formatIST(suggestion.posted_at)}
-            </p>
+          {/* Posted timestamp */}
+          {isPosted && suggestion.posted_at && (
+            <p className="text-[10px] text-green-400">Posted {formatIST(suggestion.posted_at)}</p>
+          )}
+
+          {/* Rejected timestamp */}
+          {isRejected && suggestion.rejected_at && (
+            <p className="text-[10px] text-red-400/60">Rejected {formatIST(suggestion.rejected_at)}</p>
           )}
         </div>
 
-        {/* Actions */}
+        {/* Action column */}
         <div className="flex flex-col gap-1.5 shrink-0 items-end">
-          {(suggestion.status === "pending" || suggestion.status === "approved" || suggestion.status === "edited") && (
+          {(isPending || isApproved) && (
             <>
-              {suggestion.status !== "approved" && suggestion.status !== "edited" && (
+              {isPending && (
                 <button
                   onClick={() => act("approve", () => onApprove(suggestion.id))}
                   disabled={!!actioning}
@@ -337,7 +356,7 @@ function SuggestionCard({
                 </button>
               )}
 
-              {(suggestion.status === "approved" || suggestion.status === "edited") && (
+              {isApproved && (
                 <>
                   <span className="flex items-center gap-1 text-[10px] font-semibold px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400">
                     <Check size={10} /> Approved
@@ -357,33 +376,35 @@ function SuggestionCard({
                 onClick={() => setShowEditor((v) => !v)}
                 className="flex items-center gap-1 text-[10px] px-3 py-1.5 rounded-lg border border-white/[0.07] text-zinc-500 hover:text-white hover:border-white/[0.2] transition-all"
               >
-                {showEditor ? <EyeOff size={10} /> : <Eye size={10} />}
+                <Pencil size={9} />
                 {showEditor ? "Close" : "Edit"}
               </button>
 
               <button
-                onClick={() => act("skip", () => onSkip(suggestion.id))}
+                onClick={() => act("reject", () => onReject(suggestion.id))}
                 disabled={!!actioning}
-                className="text-[10px] text-zinc-600 hover:text-zinc-400 transition-colors"
+                className="flex items-center gap-1 text-[10px] px-2 py-1 rounded text-zinc-700 hover:text-red-400 transition-colors"
               >
-                Skip
+                {actioning === "reject" ? <Loader2 size={9} className="animate-spin" /> : <ThumbsDown size={9} />}
+                Reject
               </button>
             </>
           )}
 
-          {suggestion.status === "skipped" && (
+          {isRejected && (
             <button
               onClick={() => act("restore", () => onRestore(suggestion.id))}
               disabled={!!actioning}
-              className="text-[10px] text-zinc-500 hover:text-zinc-300 transition-colors"
+              className="flex items-center gap-1 text-[10px] px-3 py-1.5 rounded-lg border border-white/[0.07] text-zinc-500 hover:text-zinc-300 transition-all"
             >
+              {actioning === "restore" ? <Loader2 size={9} className="animate-spin" /> : <RotateCcw size={9} />}
               Restore
             </button>
           )}
         </div>
       </div>
 
-      {/* Inline editor */}
+      {/* Inline caption editor */}
       <AnimatePresence>
         {showEditor && (
           <CaptionEditor
@@ -400,24 +421,24 @@ function SuggestionCard({
 // ─── Day Group ────────────────────────────────────────────────────────────────
 
 function DayGroup({
-  dayNum, dayLabel, items, weekStart,
-  onApprove, onSkip, onRestore, onPostNow, onEditSave,
+  dayLabel, weekStart, dayNum, items,
+  onApprove, onReject, onRestore, onPostNow, onEditSave,
 }: {
-  dayNum: number;
-  dayLabel: string;
+  dayLabel:  string;
   weekStart: string;
-  items: Suggestion[];
+  dayNum:    number;
+  items:     Suggestion[];
   onApprove:  (id: string) => Promise<void>;
-  onSkip:     (id: string) => Promise<void>;
+  onReject:   (id: string) => Promise<void>;
   onRestore:  (id: string) => Promise<void>;
-  onPostNow:  (id: string, captionOverride?: string) => Promise<void>;
-  onEditSave: (id: string, caption: string) => Promise<void>;
+  onPostNow:  (id: string) => Promise<void>;
+  onEditSave: (id: string, caption: string, hashtags: string[]) => Promise<void>;
 }) {
   const [open, setOpen] = useState(true);
   const monday   = new Date(weekStart + "T00:00:00Z");
   monday.setUTCDate(monday.getUTCDate() + (dayNum - 1));
   const dateLabel = monday.toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "UTC" });
-  const approved  = items.filter((i) => i.status === "approved" || i.status === "posted" || i.status === "edited").length;
+  const approved  = items.filter((i) => ["approved","edited","posted"].includes(i.status)).length;
 
   return (
     <div className="space-y-2">
@@ -427,12 +448,9 @@ function DayGroup({
       >
         <span className="text-sm font-semibold text-white">{dayLabel}</span>
         <span className="text-xs text-zinc-600">{dateLabel}</span>
-        <span className="ml-auto text-xs text-zinc-500">
-          Approved {approved}/{items.length}
-        </span>
+        <span className="ml-auto text-xs text-zinc-500">{approved}/{items.length} approved</span>
         {open ? <ChevronUp size={14} className="text-zinc-600" /> : <ChevronDown size={14} className="text-zinc-600" />}
       </button>
-
       {open && (
         <div className="space-y-2 ml-2">
           {items.map((s) => (
@@ -440,7 +458,7 @@ function DayGroup({
               key={s.id}
               suggestion={s}
               onApprove={onApprove}
-              onSkip={onSkip}
+              onReject={onReject}
               onRestore={onRestore}
               onPostNow={onPostNow}
               onEditSave={onEditSave}
@@ -452,85 +470,132 @@ function DayGroup({
   );
 }
 
-// ─── Tab: AI Suggestions ─────────────────────────────────────────────────────
+// ─── Main Page ────────────────────────────────────────────────────────────────
 
-function SuggestionsTab() {
+export default function SocialPage() {
   const toast = useToast();
 
-  const [suggestions,   setSuggestions]   = useState<Suggestion[]>([]);
-  const [loading,       setLoading]       = useState(true);
-  const [generating,    setGenerating]    = useState(false);
-  const [approvingAll,  setApprovingAll]  = useState(false);
-  const [foldersOk,     setFoldersOk]     = useState<boolean | null>(null);
+  const [activeFilter, setActiveFilter]   = useState<FilterTab>("pending");
+  const [suggestions,  setSuggestions]    = useState<Suggestion[]>([]);
+  const [loading,      setLoading]        = useState(true);
+  const [approvingAll, setApprovingAll]   = useState(false);
+  const [foldersOk,    setFoldersOk]      = useState<boolean | null>(null);
 
-  const weekStart = getMondayDate();
+  // Agent run state
+  const [runStatus,    setRunStatus]      = useState<"idle" | "running" | "failed">("idle");
+  const [runId,        setRunId]          = useState<string | null>(null);
+  const [runError,     setRunError]       = useState<string | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const fetchSuggestions = useCallback(async () => {
+  // ── Fetch suggestions by filter ──────────────────────────────────────────────
+
+  const fetchSuggestions = useCallback(async (filter: FilterTab = activeFilter) => {
     setLoading(true);
     try {
-      const [sugsRes, settingsRes] = await Promise.all([
-        fetch(`/api/agent/suggestions?week_start=${weekStart}`),
+      const tab = FILTER_TABS.find((t) => t.id === filter)!;
+      const res = await fetch(`/api/agent/suggestions?status_in=${encodeURIComponent(tab.statusIn)}`);
+      const d   = await res.json() as { suggestions?: Suggestion[] };
+      setSuggestions(d.suggestions ?? []);
+    } catch (e) { console.error(e); }
+    finally { setLoading(false); }
+  }, [activeFilter]);
+
+  // ── Check for in-progress run on mount ──────────────────────────────────────
+
+  const checkExistingRun = useCallback(async () => {
+    try {
+      const [runsRes, settingsRes] = await Promise.all([
+        fetch("/api/agent/runs?limit=1"),
         fetch("/api/agent/settings"),
       ]);
-
-      if (sugsRes.ok) {
-        const d = await sugsRes.json() as { suggestions?: Suggestion[] };
-        setSuggestions(d.suggestions ?? []);
+      if (runsRes.ok) {
+        const d = await runsRes.json() as { runs?: AgentRun[] };
+        const latest = d.runs?.[0];
+        if (latest?.status === "running") {
+          setRunStatus("running");
+          setRunId(latest.id);
+        }
       }
-
       if (settingsRes.ok) {
-        const d = await settingsRes.json() as {
-          settings?: { photos_folder_id?: string; videos_folder_id?: string };
-        };
-        const s = d.settings;
-        setFoldersOk(!!(s?.photos_folder_id || s?.videos_folder_id));
+        const d = await settingsRes.json() as { settings?: { photos_folder_id?: string; videos_folder_id?: string } };
+        setFoldersOk(!!(d.settings?.photos_folder_id || d.settings?.videos_folder_id));
       }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
+    } catch (e) { console.error(e); }
+  }, []);
+
+  useEffect(() => {
+    checkExistingRun();
+    fetchSuggestions();
+  }, [checkExistingRun, fetchSuggestions]);
+
+  // ── Polling for run completion ────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (runStatus !== "running") {
+      if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+      return;
     }
-  }, [weekStart]);
+    pollRef.current = setInterval(async () => {
+      try {
+        const res  = await fetch("/api/agent/runs?limit=1");
+        const data = await res.json() as { runs?: AgentRun[] };
+        const run  = data.runs?.[0];
+        if (!run) return;
+        if (run.status === "completed") {
+          clearInterval(pollRef.current!); pollRef.current = null;
+          setRunStatus("idle");
+          toast(`${run.suggestions_generated ?? 14} new suggestions generated!`);
+          await fetchSuggestions("pending");
+          setActiveFilter("pending");
+        } else if (run.status === "failed") {
+          clearInterval(pollRef.current!); pollRef.current = null;
+          setRunStatus("failed");
+          setRunError(run.error_message ?? "Agent run failed");
+          toast("Agent run failed", "error");
+        }
+      } catch (e) { console.error(e); }
+    }, 3_000);
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, [runStatus, toast, fetchSuggestions]);
 
-  useEffect(() => { fetchSuggestions(); }, [fetchSuggestions]);
+  // ── Switch filter tab ─────────────────────────────────────────────────────────
 
-  const runAgent = async () => {
-    setGenerating(true);
+  const switchFilter = (f: FilterTab) => {
+    if (f === activeFilter) return;
+    setActiveFilter(f);
+    fetchSuggestions(f);
+  };
+
+  // ── Run agent now ────────────────────────────────────────────────────────────
+
+  const handleRunAgent = async () => {
+    if (runStatus === "running") return;
+    setRunStatus("running");
+    setRunError(null);
     try {
-      const res  = await fetch("/api/agent/run-weekly", { method: "POST" });
-      const data = await res.json() as { success: boolean; error?: string };
-      if (!data.success) { toast(data.error ?? "Failed", "error"); return; }
-      toast("Content plan generated for the week!");
-      await fetchSuggestions();
+      const res  = await fetch("/api/agent/trigger", { method: "POST" });
+      const data = await res.json() as { success?: boolean; run_id?: string; error?: string };
+      if (!res.ok) {
+        if (res.status === 409) {
+          // Already running — start polling the existing run
+          toast("Agent is already generating content — waiting for it to finish…");
+          setRunId(data.run_id ?? null);
+          return;
+        }
+        setRunStatus("failed");
+        setRunError(data.error ?? "Failed to start agent");
+        toast(data.error ?? "Failed to start agent", "error");
+        return;
+      }
+      setRunId(data.run_id ?? null);
     } catch {
+      setRunStatus("failed");
+      setRunError("Network error");
       toast("Network error", "error");
-    } finally {
-      setGenerating(false);
     }
   };
 
-  const approveAll = async () => {
-    setApprovingAll(true);
-    try {
-      await fetch("/api/agent/approve", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body:   JSON.stringify({ approve_all: true, week_start: weekStart }),
-      });
-      setSuggestions((prev) =>
-        prev.map((s) =>
-          s.status === "pending"
-            ? { ...s, status: "approved", approved_at: new Date().toISOString() }
-            : s,
-        ),
-      );
-      toast("All suggestions approved!");
-    } catch {
-      toast("Error", "error");
-    } finally {
-      setApprovingAll(false);
-    }
-  };
+  // ── Suggestion actions ────────────────────────────────────────────────────────
 
   const handleApprove = async (id: string) => {
     await fetch("/api/agent/approve", {
@@ -539,299 +604,326 @@ function SuggestionsTab() {
       body:    JSON.stringify({ suggestion_id: id }),
     });
     setSuggestions((prev) =>
-      prev.map((s) =>
-        s.id === id ? { ...s, status: "approved", approved_at: new Date().toISOString() } : s,
-      ),
+      prev.map((s) => s.id === id ? { ...s, status: "approved" as const, approved_at: new Date().toISOString() } : s)
     );
   };
 
-  const handleSkip = async (id: string) => {
-    await fetch("/api/agent/skip", {
+  const handleReject = async (id: string) => {
+    await fetch("/api/agent/reject", {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
       body:    JSON.stringify({ suggestion_id: id }),
     });
-    setSuggestions((prev) => prev.map((s) => s.id === id ? { ...s, status: "skipped" } : s));
+    setSuggestions((prev) => prev.filter((s) => s.id !== id));
   };
 
   const handleRestore = async (id: string) => {
-    await fetch("/api/agent/skip", {
+    await fetch("/api/agent/reject", {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
       body:    JSON.stringify({ suggestion_id: id, restore: true }),
     });
-    setSuggestions((prev) => prev.map((s) => s.id === id ? { ...s, status: "pending" } : s));
+    setSuggestions((prev) => prev.filter((s) => s.id !== id));
+    toast("Restored to Pending Review");
   };
 
-  const handlePostNow = async (id: string, captionOverride?: string) => {
+  const handlePostNow = async (id: string) => {
     const res  = await fetch("/api/social/post-now", {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ suggestion_id: id, caption_override: captionOverride }),
+      body:    JSON.stringify({ suggestion_id: id }),
     });
     const data = await res.json() as { success: boolean; posted_to?: string[]; error?: string };
-    if (!data.success) {
-      toast(data.error ?? "Posting failed", "error");
-      return;
-    }
+    if (!data.success) { toast(data.error ?? "Posting failed", "error"); return; }
     toast(`Posted to ${(data.posted_to ?? []).join(", ")} ✓`);
     setSuggestions((prev) =>
-      prev.map((s) => s.id === id ? { ...s, status: "posted", posted_at: new Date().toISOString() } : s),
+      prev.map((s) => s.id === id ? { ...s, status: "posted" as const, posted_at: new Date().toISOString() } : s)
     );
   };
 
-  const handleEditSave = async (id: string, caption: string) => {
+  const handleEditSave = async (id: string, caption: string, hashtags: string[]) => {
+    const fullCaption = `${caption}\n\n${hashtags.join(" ")}`;
     await fetch(`/api/agent/suggestions/${id}`, {
       method:  "PATCH",
       headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ caption_edited: caption, status: "approved" }),
+      body:    JSON.stringify({ caption_edited: fullCaption, status: "approved" }),
     });
     setSuggestions((prev) =>
       prev.map((s) =>
-        s.id === id ? { ...s, caption_edited: caption, status: "approved", approved_at: new Date().toISOString() } : s,
-      ),
+        s.id === id
+          ? { ...s, caption_edited: fullCaption, hashtags, status: "approved" as const, approved_at: new Date().toISOString() }
+          : s
+      )
     );
     toast("Caption saved and approved");
   };
 
-  const approved = suggestions.filter((s) => ["approved","edited","posted"].includes(s.status)).length;
+  const handleApproveAll = async () => {
+    const pendingIds = suggestions.filter((s) => s.status === "pending").map((s) => s.id);
+    if (pendingIds.length === 0) return;
+    setApprovingAll(true);
+    try {
+      // Use the current week's batch for the approve-all action
+      const weekStart = suggestions.find((s) => s.status === "pending")?.week_start;
+      if (weekStart) {
+        await fetch("/api/agent/approve", {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ approve_all: true, week_start: weekStart }),
+        });
+        setSuggestions((prev) =>
+          prev.map((s) =>
+            s.status === "pending" && s.week_start === weekStart
+              ? { ...s, status: "approved" as const, approved_at: new Date().toISOString() }
+              : s
+          )
+        );
+        toast("All pending suggestions approved!");
+      }
+    } catch { toast("Error", "error"); }
+    finally { setApprovingAll(false); }
+  };
 
-  // Group by day
-  const byDay: Record<number, Suggestion[]> = {};
-  for (const s of suggestions) {
-    (byDay[s.day_of_week] = byDay[s.day_of_week] ?? []).push(s);
+  // ── Group pending by day for the pending view ──────────────────────────────
+
+  const pendingByWeekDay: Record<string, Record<number, Suggestion[]>> = {};
+  if (activeFilter === "pending") {
+    for (const s of suggestions) {
+      if (!pendingByWeekDay[s.week_start]) pendingByWeekDay[s.week_start] = {};
+      const byDay = pendingByWeekDay[s.week_start];
+      (byDay[s.day_of_week] = byDay[s.day_of_week] ?? []).push(s);
+    }
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-24">
-        <Loader2 size={22} className="text-zinc-600 animate-spin" />
-      </div>
-    );
-  }
+  const pendingCount  = suggestions.filter((s) => s.status === "pending").length;
+  const approvedCount = suggestions.filter((s) => ["approved","edited"].includes(s.status)).length;
 
-  if (foldersOk === false) {
-    return (
-      <div className="flex flex-col items-center justify-center py-20 text-center">
-        <div className="w-14 h-14 rounded-2xl bg-pink-500/10 border border-pink-500/20 flex items-center justify-center mb-4">
-          <Sparkles size={24} className="text-pink-400" />
-        </div>
-        <h3 className="text-sm font-semibold text-white mb-2">Set up your content folders</h3>
-        <p className="text-xs text-zinc-500 max-w-xs mb-5">
-          Add your Google Drive folder IDs to let the AI scan your photos and videos weekly.
-        </p>
-        <Link
-          href="/social/settings"
-          className="flex items-center gap-2 text-xs font-medium text-white bg-pink-600 hover:bg-pink-500 px-5 py-2.5 rounded-xl transition-all"
-        >
-          <Settings size={13} /> Go to Settings →
-        </Link>
-      </div>
-    );
-  }
+  // ── Folders not configured empty state ──────────────────────────────────────
 
-  if (suggestions.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center py-20 text-center">
-        <div className="w-14 h-14 rounded-2xl bg-pink-500/10 border border-pink-500/20 flex items-center justify-center mb-4">
-          <Sparkles size={24} className="text-pink-400" />
-        </div>
-        <h3 className="text-sm font-semibold text-white mb-2">No suggestions yet for this week</h3>
-        <p className="text-xs text-zinc-500 max-w-xs mb-5">
-          Generate this week&apos;s content plan — Claude will pick the best photos and videos and write captions.
-        </p>
-        <button
-          onClick={runAgent}
-          disabled={generating}
-          className="flex items-center gap-2 text-xs font-medium text-white bg-pink-600 hover:bg-pink-500 disabled:opacity-50 px-5 py-2.5 rounded-xl transition-all"
-        >
-          {generating
-            ? <><Loader2 size={13} className="animate-spin" /> Generating…</>
-            : <><Sparkles size={13} /> Generate week&apos;s content →</>}
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-4">
-      {/* Header row */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="flex items-center gap-2">
-          <div className="h-2 flex-1 min-w-[120px] bg-white/[0.04] rounded-full overflow-hidden">
-            <div
-              className="h-full bg-amber-500 rounded-full transition-all"
-              style={{ width: `${Math.round((approved / Math.max(suggestions.length, 1)) * 100)}%` }}
-            />
-          </div>
-          <span className="text-xs text-zinc-500 whitespace-nowrap">
-            {approved} / {suggestions.length} approved
-          </span>
-        </div>
-        <div className="flex gap-2 ml-auto">
-          <button
-            onClick={approveAll}
-            disabled={approvingAll}
-            className="flex items-center gap-1.5 text-xs font-medium text-amber-400 border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 disabled:opacity-50 px-3 py-1.5 rounded-xl transition-all"
-          >
-            {approvingAll ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
-            Approve all
-          </button>
-          <button
-            onClick={runAgent}
-            disabled={generating}
-            className="flex items-center gap-1.5 text-xs font-medium text-zinc-400 border border-white/[0.07] hover:border-white/[0.2] hover:text-white disabled:opacity-50 px-3 py-1.5 rounded-xl transition-all"
-          >
-            {generating ? <Loader2 size={11} className="animate-spin" /> : <Sparkles size={11} />}
-            Regenerate
-          </button>
-        </div>
-      </div>
-
-      {/* Day groups */}
-      {Object.entries(byDay)
-        .sort(([a], [b]) => Number(a) - Number(b))
-        .map(([day, items]) => (
-          <DayGroup
-            key={day}
-            dayNum={Number(day)}
-            dayLabel={DAY_FULL[Number(day)] ?? `Day ${day}`}
-            weekStart={weekStart}
-            items={items}
-            onApprove={handleApprove}
-            onSkip={handleSkip}
-            onRestore={handleRestore}
-            onPostNow={handlePostNow}
-            onEditSave={handleEditSave}
-          />
-        ))}
-    </div>
-  );
-}
-
-// ─── Tab: History ─────────────────────────────────────────────────────────────
-
-function HistoryTab() {
-  const [items,   setItems]   = useState<Suggestion[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [filter,  setFilter]  = useState<"week" | "month" | "all">("month");
-
-  useEffect(() => {
-    setLoading(true);
-    fetch(`/api/agent/suggestions?status=posted&range=${filter}`)
-      .then((r) => r.json())
-      .then((d: { suggestions?: Suggestion[] }) => setItems(d.suggestions ?? []))
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, [filter]);
-
-  return (
-    <div className="space-y-4">
-      <div className="flex gap-2">
-        {(["week","month","all"] as const).map((f) => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className={`text-xs px-3 py-1.5 rounded-xl border transition-all capitalize ${
-              filter === f
-                ? "bg-pink-500/15 border-pink-500/30 text-pink-300"
-                : "border-white/[0.07] text-zinc-500 hover:text-zinc-300"
-            }`}
-          >
-            {f === "week" ? "This week" : f === "month" ? "This month" : "All time"}
-          </button>
-        ))}
-      </div>
-
-      {loading ? (
-        <div className="flex justify-center py-16"><Loader2 size={20} className="text-zinc-600 animate-spin" /></div>
-      ) : items.length === 0 ? (
-        <div className="text-center py-16 text-zinc-600">
-          <History size={28} className="mx-auto mb-3 opacity-30" />
-          <p className="text-sm">No posted content {filter === "week" ? "this week" : filter === "month" ? "this month" : "yet"}.</p>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {items.map((s) => (
-            <div key={s.id} className="flex items-center gap-3 px-4 py-3 bg-[#111114] border border-white/[0.06] rounded-xl">
-              <div className="w-10 h-10 shrink-0 rounded-lg overflow-hidden bg-white/[0.03] border border-white/[0.06] flex items-center justify-center">
-                {s.drive_thumbnail_url
-                  // eslint-disable-next-line @next/next/no-img-element
-                  ? <img src={s.drive_thumbnail_url} alt="" className="w-full h-full object-cover" />
-                  : <div className="text-zinc-700">{s.content_type === "post" ? <Image size={14} /> : <Film size={14} />}</div>}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs text-zinc-300 truncate">{s.caption.slice(0, 80)}…</p>
-                <div className="flex items-center gap-1.5 mt-0.5">
-                  {(s.platforms ?? []).map((p) => <span key={p}>{PLATFORM_ICONS[p]}</span>)}
-                  <span className="text-[10px] text-zinc-600">
-                    {s.posted_at ? formatIST(s.posted_at) : "—"}
-                  </span>
-                </div>
-              </div>
-              <span className="text-[9px] font-semibold px-2 py-0.5 rounded-full border bg-green-500/20 text-green-400 border-green-500/30 shrink-0">
-                Posted ✓
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── Main Page ────────────────────────────────────────────────────────────────
-
-type Tab = "suggestions" | "history";
-
-export default function SocialPage() {
-  const [activeTab, setActiveTab] = useState<Tab>("suggestions");
-
-  const TABS: Array<{ id: Tab; label: string; icon: React.ReactNode }> = [
-    { id: "suggestions", label: "AI Suggestions", icon: <Sparkles size={13} /> },
-    { id: "history",     label: "History",        icon: <History    size={13} /> },
-  ];
+  const showFolderWarning = foldersOk === false;
 
   return (
     <div className="flex flex-col min-h-screen">
+
+      {/* ── Header ────────────────────────────────────────────────────────────── */}
       <header className="sticky top-0 z-30 bg-[#0a0a0d]/80 backdrop-blur-md border-b border-white/[0.06] px-8 py-4 flex items-center justify-between">
         <div>
-          <h1 className="text-base font-semibold text-white">Social</h1>
-          <p className="text-xs text-zinc-500">
-            Week of {getMondayLabel()}
-          </p>
+          <h1 className="text-base font-semibold text-white">Social Content</h1>
+          <p className="text-xs text-zinc-500">AI-generated suggestions for review and approval</p>
         </div>
-        <Link
-          href="/social/settings"
-          className="flex items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-200 border border-white/[0.07] hover:border-white/[0.15] px-3 py-1.5 rounded-xl transition-all"
-        >
-          <Settings size={12} /> Settings
-        </Link>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleRunAgent}
+            disabled={runStatus === "running"}
+            className="flex items-center gap-1.5 text-xs font-semibold text-white bg-pink-600 hover:bg-pink-500 disabled:opacity-60 disabled:cursor-not-allowed px-4 py-2 rounded-xl transition-all"
+          >
+            {runStatus === "running"
+              ? <><Loader2 size={12} className="animate-spin" /> Generating…</>
+              : <><Sparkles size={12} /> Run Agent Now</>
+            }
+          </button>
+          <Link
+            href="/social/settings"
+            className="flex items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-200 border border-white/[0.07] hover:border-white/[0.15] px-3 py-2 rounded-xl transition-all"
+          >
+            <Settings size={12} /> Settings
+          </Link>
+        </div>
       </header>
 
-      {/* Tabs */}
+      {/* ── Generating banner ─────────────────────────────────────────────────── */}
+      <AnimatePresence>
+        {runStatus === "running" && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="flex items-center gap-3 px-8 py-3 bg-pink-500/5 border-b border-pink-500/15">
+              <Loader2 size={14} className="text-pink-400 animate-spin shrink-0" />
+              <div>
+                <p className="text-xs text-pink-300 font-medium">Generating new content suggestions…</p>
+                <p className="text-[10px] text-pink-400/60">
+                  Claude is scanning your Drive folders and writing captions. This usually takes 20–40 seconds.
+                </p>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {runStatus === "failed" && runError && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="flex items-center gap-3 px-8 py-3 bg-red-500/5 border-b border-red-500/15">
+              <AlertTriangle size={14} className="text-red-400 shrink-0" />
+              <p className="text-xs text-red-300">{runError}</p>
+              <button
+                onClick={() => setRunStatus("idle")}
+                className="ml-auto text-red-500 hover:text-red-300 transition-colors"
+              >
+                <X size={13} />
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Filter tabs ───────────────────────────────────────────────────────── */}
       <div className="px-8 pt-4 border-b border-white/[0.06]">
         <div className="flex gap-1">
-          {TABS.map((tab) => (
+          {FILTER_TABS.map((tab) => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-1.5 px-4 py-2 text-xs font-medium rounded-t-xl border-b-2 transition-all ${
-                activeTab === tab.id
+              onClick={() => switchFilter(tab.id)}
+              className={`px-4 py-2 text-xs font-medium rounded-t-xl border-b-2 transition-all ${
+                activeFilter === tab.id
                   ? "text-pink-400 border-pink-400 bg-pink-500/5"
                   : "text-zinc-500 border-transparent hover:text-zinc-300"
               }`}
             >
-              {tab.icon}
               {tab.label}
+              {tab.id === "pending" && pendingCount > 0 && (
+                <span className="ml-1.5 text-[9px] bg-pink-500/20 text-pink-400 px-1.5 py-0.5 rounded-full">
+                  {pendingCount}
+                </span>
+              )}
             </button>
           ))}
         </div>
       </div>
 
+      {/* ── Main content ─────────────────────────────────────────────────────── */}
       <main className="flex-1 px-6 md:px-8 py-6 max-w-3xl w-full mx-auto">
-        {activeTab === "suggestions" && <SuggestionsTab />}
-        {activeTab === "history"     && <HistoryTab />}
+
+        {/* Folder not configured */}
+        {showFolderWarning && (
+          <div className="flex flex-col items-center justify-center py-16 text-center">
+            <div className="w-14 h-14 rounded-2xl bg-pink-500/10 border border-pink-500/20 flex items-center justify-center mb-4">
+              <Sparkles size={24} className="text-pink-400" />
+            </div>
+            <h3 className="text-sm font-semibold text-white mb-2">Connect your Drive folders first</h3>
+            <p className="text-xs text-zinc-500 max-w-xs mb-5">
+              Add your Google Drive photo and video folder IDs in Settings so the agent can scan and generate suggestions.
+            </p>
+            <Link
+              href="/social/settings"
+              className="flex items-center gap-2 text-xs font-medium text-white bg-pink-600 hover:bg-pink-500 px-5 py-2.5 rounded-xl transition-all"
+            >
+              <Settings size={13} /> Open Settings
+            </Link>
+          </div>
+        )}
+
+        {/* Loading */}
+        {!showFolderWarning && loading && (
+          <div className="flex justify-center py-20">
+            <Loader2 size={22} className="text-zinc-600 animate-spin" />
+          </div>
+        )}
+
+        {/* Empty state */}
+        {!showFolderWarning && !loading && suggestions.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <div className="w-14 h-14 rounded-2xl bg-pink-500/10 border border-pink-500/20 flex items-center justify-center mb-4">
+              <Sparkles size={24} className="text-pink-400" />
+            </div>
+            <h3 className="text-sm font-semibold text-white mb-2">
+              {activeFilter === "pending"  ? "No suggestions pending review"  :
+               activeFilter === "approved" ? "No approved suggestions yet"    :
+               activeFilter === "posted"   ? "Nothing posted yet"             :
+               "No rejected suggestions"}
+            </h3>
+            {activeFilter === "pending" && (
+              <p className="text-xs text-zinc-500 max-w-xs mb-5">
+                Run the agent to generate this week&apos;s content plan — Claude will select the best photos and videos and write captions.
+              </p>
+            )}
+            {activeFilter === "pending" && (
+              <button
+                onClick={handleRunAgent}
+                disabled={runStatus === "running"}
+                className="flex items-center gap-2 text-xs font-medium text-white bg-pink-600 hover:bg-pink-500 disabled:opacity-50 px-5 py-2.5 rounded-xl transition-all"
+              >
+                {runStatus === "running"
+                  ? <><Loader2 size={13} className="animate-spin" /> Generating…</>
+                  : <><Sparkles size={13} /> Run Agent Now</>
+                }
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Pending view — grouped by week then day */}
+        {!showFolderWarning && !loading && suggestions.length > 0 && activeFilter === "pending" && (
+          <div className="space-y-6">
+            {/* Approve-all toolbar */}
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-zinc-500">
+                {pendingCount} pending · {approvedCount} approved
+              </span>
+              {pendingCount > 0 && (
+                <button
+                  onClick={handleApproveAll}
+                  disabled={approvingAll}
+                  className="flex items-center gap-1.5 text-xs font-medium text-amber-400 border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 disabled:opacity-50 px-3 py-1.5 rounded-xl transition-all"
+                >
+                  {approvingAll ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
+                  Approve all pending
+                </button>
+              )}
+            </div>
+
+            {/* Week groups */}
+            {Object.entries(pendingByWeekDay)
+              .sort(([a], [b]) => b.localeCompare(a))
+              .map(([weekStart, byDay]) => (
+                <div key={weekStart} className="space-y-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-600 px-1">
+                    Week of {new Date(weekStart + "T00:00:00Z").toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" })}
+                  </p>
+                  {Object.entries(byDay)
+                    .sort(([a], [b]) => Number(a) - Number(b))
+                    .map(([day, items]) => (
+                      <DayGroup
+                        key={day}
+                        dayNum={Number(day)}
+                        dayLabel={items[0]?.suggested_day_label ?? `Day ${day}`}
+                        weekStart={weekStart}
+                        items={items}
+                        onApprove={handleApprove}
+                        onReject={handleReject}
+                        onRestore={handleRestore}
+                        onPostNow={handlePostNow}
+                        onEditSave={handleEditSave}
+                      />
+                    ))}
+                </div>
+              ))
+            }
+          </div>
+        )}
+
+        {/* Flat list for approved / posted / rejected */}
+        {!showFolderWarning && !loading && suggestions.length > 0 && activeFilter !== "pending" && (
+          <div className="space-y-2">
+            {suggestions.map((s) => (
+              <SuggestionCard
+                key={s.id}
+                suggestion={s}
+                onApprove={handleApprove}
+                onReject={handleReject}
+                onRestore={handleRestore}
+                onPostNow={handlePostNow}
+                onEditSave={handleEditSave}
+              />
+            ))}
+          </div>
+        )}
       </main>
     </div>
   );

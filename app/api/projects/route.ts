@@ -7,7 +7,11 @@ export async function GET() {
     .select(`
       id, title, event_date, event_type, workflow_stage,
       budget, location, notes, created_at, updated_at,
-      contact:contacts ( id, first_name, last_name, email, phone )
+      contact:contacts ( id, first_name, last_name, email, phone ),
+      team:project_team_assignments (
+        id,
+        member:contacts ( first_name, last_name )
+      )
     `)
     .order("created_at", { ascending: false });
 

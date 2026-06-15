@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { STAGES, getStageColor, getStageLabel } from "@/lib/workflow";
 import { useToast } from "@/lib/toast";
+import { TeamScheduleSection } from "./TeamScheduleSection";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -712,6 +713,10 @@ export default function ProjectDetailPage({
             )}
           </div>
         </div>
+
+        {/* ── Section 5: Team & Schedule ──────────────────────────────────── */}
+        <TeamScheduleSection projectId={id} />
+
       </main>
     </div>
   );

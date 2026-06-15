@@ -56,6 +56,8 @@ function SocialSettingsContent() {
   const [gscSiteUrl,   setGscSiteUrl]   = useState<string | null>(null);
   const [gmbConnected,  setGmbConnected]  = useState(false);
   const [gmbLocation,   setGmbLocation]   = useState<string | null>(null);
+  const [calConnected,  setCalConnected]  = useState(false);
+  const [calExpiry,     setCalExpiry]     = useState<string | null>(null);
   const [newHashtag,   setNewHashtag]   = useState("");
 
   // ── Load settings ──────────────────────────────────────────────────────────
@@ -63,12 +65,13 @@ function SocialSettingsContent() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [settingsRes, runsRes, ytRes, gscRes, gmbRes] = await Promise.all([
+      const [settingsRes, runsRes, ytRes, gscRes, gmbRes, calRes] = await Promise.all([
         fetch("/api/agent/settings"),
         fetch("/api/agent/runs?limit=1"),
         fetch("/api/youtube/status"),
         fetch("/api/gsc/status"),
         fetch("/api/gmb/status"),
+        fetch("/api/calendar/status"),
       ]);
 
       if (settingsRes.ok) {
@@ -108,6 +111,12 @@ function SocialSettingsContent() {
         setGmbConnected(d.connected);
         setGmbLocation(d.location_name ?? null);
       }
+
+      if (calRes.ok) {
+        const d = await calRes.json() as { connected: boolean; expiry?: string | null };
+        setCalConnected(d.connected);
+        setCalExpiry(d.expiry ?? null);
+      }
     } catch (e) {
       console.error(e);
     } finally {
@@ -128,6 +137,10 @@ function SocialSettingsContent() {
     const gmbStatus = searchParams.get("gmb");
     if (gmbStatus === "connected") toast("Google My Business connected!");
     if (gmbStatus === "error")     toast("Google My Business connection failed", "error");
+
+    const calStatus = searchParams.get("calendar");
+    if (calStatus === "connected") toast("Google Calendar connected!");
+    if (calStatus === "error")     toast("Google Calendar connection failed", "error");
   }, [loadData, searchParams, toast]);
 
   // ── Save settings ──────────────────────────────────────────────────────────
@@ -487,6 +500,56 @@ function SocialSettingsContent() {
                 className="flex items-center gap-2 text-xs font-medium text-white bg-emerald-600 hover:bg-emerald-500 px-4 py-2 rounded-xl transition-all"
               >
                 <MapPin size={13} /> Connect My Business
+              </a>
+            </div>
+          )}
+        </section>
+
+        {/* ─── H. Google Calendar ──────────────────────────────────────────── */}
+        <section className="bg-[#111114] border border-white/[0.07] rounded-2xl p-6">
+          <SectionHead icon={Calendar} title="Google Calendar" />
+          {calConnected ? (
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="flex items-center gap-2 text-sm text-green-400 font-medium">
+                  <Check size={14} /> Google Calendar connected
+                </p>
+                {calExpiry && (
+                  <p className="text-xs text-zinc-500 mt-0.5">
+                    Token valid until{" "}
+                    {new Date(calExpiry).toLocaleString("en-IN", {
+                      timeZone: "Asia/Kolkata",
+                      dateStyle: "medium",
+                      timeStyle: "short",
+                    })}
+                  </p>
+                )}
+                <p className="text-xs text-zinc-600 mt-1">
+                  Team members are booked automatically when a quote is sent.
+                </p>
+              </div>
+              <a
+                href="/api/calendar/auth"
+                className="text-xs text-zinc-600 hover:text-zinc-400 underline transition-colors"
+              >
+                Reconnect
+              </a>
+            </div>
+          ) : (
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-sm text-zinc-400">
+                  Connect Google Calendar to automatically create and sync team bookings when a quote is approved.
+                </p>
+                <p className="text-[10px] text-zinc-600 mt-1.5">
+                  Only events for team members on a project are created — one all-day event per team member per project.
+                </p>
+              </div>
+              <a
+                href="/api/calendar/auth"
+                className="shrink-0 flex items-center gap-2 text-xs font-medium text-white bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded-xl transition-all"
+              >
+                <Calendar size={13} /> Connect Google Calendar
               </a>
             </div>
           )}
