@@ -143,28 +143,40 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
           return (
             <div key={item.href}>
               {hasChildren ? (
-                <button
-                  onClick={() => toggleSection(item.href)}
-                  className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all group ${
+                // Label/icon = Link (navigates); chevron = separate toggle button
+                <div
+                  className={`flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all group ${
                     isActive
                       ? "bg-white/[0.08] text-white"
                       : "text-zinc-500 hover:text-zinc-200 hover:bg-white/[0.04]"
                   }`}
                 >
-                  <Icon
-                    size={15}
-                    className={
-                      isActive
-                        ? item.activeColor
-                        : "text-zinc-600 group-hover:text-zinc-400 transition-colors"
-                    }
-                  />
-                  <span className="flex-1 text-left">{item.label}</span>
-                  <ChevronDown
-                    size={12}
-                    className={`text-zinc-600 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
-                  />
-                </button>
+                  <Link
+                    href={item.href}
+                    onClick={onNavigate}
+                    className="flex items-center gap-2.5 flex-1 min-w-0"
+                  >
+                    <Icon
+                      size={15}
+                      className={
+                        isActive
+                          ? item.activeColor
+                          : "text-zinc-600 group-hover:text-zinc-400 transition-colors"
+                      }
+                    />
+                    <span className="truncate">{item.label}</span>
+                  </Link>
+                  <button
+                    onClick={() => toggleSection(item.href)}
+                    className="shrink-0 p-0.5 rounded hover:bg-white/[0.08] transition-colors"
+                    aria-label={isOpen ? "Collapse" : "Expand"}
+                  >
+                    <ChevronDown
+                      size={12}
+                      className={`text-zinc-600 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
+                    />
+                  </button>
+                </div>
               ) : (
                 <Link
                   href={item.href}
