@@ -2,16 +2,12 @@ import { NextResponse } from "next/server";
 import { adminSupabase } from "@/lib/supabase-admin";
 
 export async function GET() {
-  // Fetch invoices linked to a project (quotes + invoices represent the agreed amount)
+  // Invoices/quotes used for payment calculations (must have amount > 0)
   const { data: invoices, error: invErr } = await adminSupabase
     .from("invoices")
     .select(`
-      id,
-      amount,
-      type,
-      status,
-      project_id,
-      project:projects ( id, title ),
+      id, amount, type, status, project_id,
+      project:projects ( id, title, workflow_stage ),
       contact:contacts ( id, first_name, last_name )
     `)
     .not("project_id", "is", null)
@@ -24,7 +20,16 @@ export async function GET() {
     return NextResponse.json({ error: invErr.message }, { status: 500 });
   }
 
-  // Fetch all payments
+  // All invoice/quote/receipt documents per project for the Documents panel
+  const { data: allDocs } = await adminSupabase
+    .from("invoices")
+    .select(
+      "id, type, status, amount, pdf_data, invoice_number, client_name, event_dates, events_list, location, created_at, project_id",
+    )
+    .not("project_id", "is", null)
+    .order("created_at", { ascending: true });
+
+  // All payments
   const { data: payments, error: pyErr } = await adminSupabase
     .from("payments")
     .select("id, invoice_id, project_id, amount, payment_type, payment_date, method, notes, created_at")
@@ -35,7 +40,7 @@ export async function GET() {
     return NextResponse.json({ error: pyErr.message }, { status: 500 });
   }
 
-  // Index payments by invoice_id for fast lookup
+  // Index payments by invoice_id
   const paymentsByInvoice = new Map<string, typeof payments>();
   for (const p of payments ?? []) {
     const arr = paymentsByInvoice.get(p.invoice_id) ?? [];
@@ -43,23 +48,34 @@ export async function GET() {
     paymentsByInvoice.set(p.invoice_id, arr);
   }
 
-  // Build per-project summary — one canonical row per project.
-  // If a project has both a quote and an invoice, use the one with the
-  // highest amount as the canonical "agreed price".
-  const projectMap = new Map<string, {
-    projectId:    string;
-    projectTitle: string;
-    clientName:   string;
-    invoiceTotal: number;
-    invoiceId:    string;
-    allInvoiceIds: string[];
-  }>();
+  // Index documents by project_id
+  const docsByProject = new Map<string, typeof allDocs>();
+  for (const d of allDocs ?? []) {
+    if (!d.project_id) continue;
+    const arr = docsByProject.get(d.project_id) ?? [];
+    arr.push(d);
+    docsByProject.set(d.project_id, arr);
+  }
+
+  // Build per-project summary (one canonical row per project)
+  const projectMap = new Map<
+    string,
+    {
+      projectId:     string;
+      projectTitle:  string;
+      clientName:    string;
+      quoteStatus:   string | null;
+      invoiceTotal:  number;
+      invoiceId:     string;
+      allInvoiceIds: string[];
+    }
+  >();
 
   for (const inv of invoices ?? []) {
     const projectRaw = inv.project as unknown;
     const project = Array.isArray(projectRaw)
-      ? (projectRaw[0] as { id: string; title: string } | undefined) ?? null
-      : (projectRaw as { id: string; title: string } | null);
+      ? (projectRaw[0] as { id: string; title: string; workflow_stage: string | null } | undefined) ?? null
+      : (projectRaw as { id: string; title: string; workflow_stage: string | null } | null);
     if (!project) continue;
 
     const contactRaw = inv.contact as unknown;
@@ -76,13 +92,13 @@ export async function GET() {
         projectId:     project.id,
         projectTitle:  project.title ?? "Untitled Project",
         clientName,
+        quoteStatus:   project.workflow_stage ?? null,
         invoiceTotal:  Number(inv.amount),
         invoiceId:     inv.id,
         allInvoiceIds: [inv.id],
       });
     } else {
       existing.allInvoiceIds.push(inv.id);
-      // Use the highest-amount invoice as canonical (that's the agreed price)
       if (Number(inv.amount) > existing.invoiceTotal) {
         existing.invoiceTotal = Number(inv.amount);
         existing.invoiceId    = inv.id;
@@ -91,34 +107,30 @@ export async function GET() {
   }
 
   const rows = Array.from(projectMap.values()).map((r) => {
-    // Collect all payments across all invoices for this project
-    const allPayments = r.allInvoiceIds.flatMap(
-      (iid) => paymentsByInvoice.get(iid) ?? [],
-    );
-
-    const totalPaid = allPayments.reduce((s, p) => s + Number(p.amount), 0);
-    const balance   = r.invoiceTotal - totalPaid;
-
-    const status =
-      totalPaid <= 0        ? "Pending"         :
-      balance   <= 0        ? "Paid in Full"     :
-                              "Partially Paid";
+    const allPayments = r.allInvoiceIds.flatMap((iid) => paymentsByInvoice.get(iid) ?? []);
+    const totalPaid   = allPayments.reduce((s, p) => s + Number(p.amount), 0);
+    const balance     = r.invoiceTotal - totalPaid;
+    const status      =
+      totalPaid <= 0 ? "Pending"       :
+      balance   <= 0 ? "Paid in Full"  :
+                       "Partially Paid";
 
     return {
       projectId:    r.projectId,
       projectTitle: r.projectTitle,
       clientName:   r.clientName,
+      quoteStatus:  r.quoteStatus,
       invoiceTotal: r.invoiceTotal,
       totalPaid,
       balance:      Math.max(0, balance),
       status,
       invoiceId:    r.invoiceId,
       payments:     allPayments,
+      documents:    docsByProject.get(r.projectId) ?? [],
     };
   });
 
-  // Sort: outstanding first, then partially paid, then paid in full
-  const ORDER = { "Pending": 0, "Partially Paid": 1, "Paid in Full": 2 } as const;
+  const ORDER = { Pending: 0, "Partially Paid": 1, "Paid in Full": 2 } as const;
   rows.sort((a, b) => ORDER[a.status as keyof typeof ORDER] - ORDER[b.status as keyof typeof ORDER]);
 
   return NextResponse.json({ rows });
