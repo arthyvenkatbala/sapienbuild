@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Loader2, ChevronDown, ChevronUp, Lightbulb, Check, X,
@@ -10,6 +11,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useToast } from "@/lib/toast";
+import { useUserRole } from "@/lib/auth";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -472,8 +474,18 @@ function DayGroup({
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
-export default function SocialPage() {
-  const toast = useToast();
+function SocialPageContent() {
+  const toast       = useToast();
+  const searchParams = useSearchParams();
+  const { role }    = useUserRole();
+  const isAdmin     = role === "admin";
+
+  // Show a brief message when middleware bounced a non-admin from /social/settings
+  useEffect(() => {
+    if (searchParams.get("access") === "denied") {
+      toast("Settings is restricted to studio admins.", "error");
+    }
+  }, [searchParams, toast]);
 
   const [activeFilter, setActiveFilter]   = useState<FilterTab>("pending");
   const [suggestions,  setSuggestions]    = useState<Suggestion[]>([]);
@@ -722,12 +734,14 @@ export default function SocialPage() {
               : <><Sparkles size={12} /> Run Agent Now</>
             }
           </button>
-          <Link
-            href="/social/settings"
-            className="flex items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-200 border border-white/[0.07] hover:border-white/[0.15] px-3 py-2 rounded-xl transition-all"
-          >
-            <Settings size={12} /> Settings
-          </Link>
+          {isAdmin && (
+            <Link
+              href="/social/settings"
+              className="flex items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-200 border border-white/[0.07] hover:border-white/[0.15] px-3 py-2 rounded-xl transition-all"
+            >
+              <Settings size={12} /> Settings
+            </Link>
+          )}
         </div>
       </header>
 
@@ -810,12 +824,14 @@ export default function SocialPage() {
             <p className="text-xs text-zinc-500 max-w-xs mb-5">
               Add your Google Drive photo and video folder IDs in Settings so the agent can scan and generate suggestions.
             </p>
-            <Link
-              href="/social/settings"
-              className="flex items-center gap-2 text-xs font-medium text-white bg-pink-600 hover:bg-pink-500 px-5 py-2.5 rounded-xl transition-all"
-            >
-              <Settings size={13} /> Open Settings
-            </Link>
+            {isAdmin && (
+              <Link
+                href="/social/settings"
+                className="flex items-center gap-2 text-xs font-medium text-white bg-pink-600 hover:bg-pink-500 px-5 py-2.5 rounded-xl transition-all"
+              >
+                <Settings size={13} /> Open Settings
+              </Link>
+            )}
           </div>
         )}
 
@@ -926,5 +942,17 @@ export default function SocialPage() {
         )}
       </main>
     </div>
+  );
+}
+
+export default function SocialPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex-1 flex items-center justify-center min-h-screen">
+        <Loader2 size={22} className="text-zinc-600 animate-spin" />
+      </div>
+    }>
+      <SocialPageContent />
+    </Suspense>
   );
 }
