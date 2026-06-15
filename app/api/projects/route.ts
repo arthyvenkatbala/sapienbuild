@@ -9,7 +9,7 @@ export async function GET() {
       budget, location, notes, created_at, updated_at,
       contact:contacts ( id, first_name, last_name, email, phone ),
       team:project_team_assignments (
-        id,
+        id, team_member_id, role,
         member:contacts ( first_name, last_name )
       )
     `)
