@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useState, useEffect, type ReactNode } from "react";
 import {
   LayoutDashboard,
@@ -16,8 +16,12 @@ import {
   X,
   Globe,
   BarChart2,
+  LogOut,
+  LogIn,
   type LucideIcon,
 } from "lucide-react";
+import { useUserRole } from "@/lib/auth";
+import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
 interface NavChild {
   label: string;
@@ -90,6 +94,65 @@ const NAV: NavItem[] = [
     activeColor: "text-sky-400",
   },
 ];
+
+function SidebarFooter({ onNavigate }: { onNavigate?: () => void }) {
+  const router       = useRouter();
+  const { role, email, loading } = useUserRole();
+  const isSignedIn   = role !== null;
+  const initial      = email ? email[0].toUpperCase() : "?";
+  const displayEmail = email ?? "";
+
+  const signOut = async () => {
+    const supabase = createSupabaseBrowserClient();
+    await supabase.auth.signOut();
+    onNavigate?.();
+    router.refresh();
+  };
+
+  if (loading) {
+    return (
+      <div className="px-4 py-4 border-t border-white/[0.06]">
+        <div className="h-8 rounded-lg bg-white/[0.04] animate-pulse" />
+      </div>
+    );
+  }
+
+  if (!isSignedIn) {
+    return (
+      <div className="px-4 py-4 border-t border-white/[0.06]">
+        <Link
+          href="/login"
+          onClick={onNavigate}
+          className="flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs text-zinc-600 hover:text-zinc-300 hover:bg-white/[0.04] transition-all"
+        >
+          <LogIn size={13} />
+          Admin sign-in
+        </Link>
+      </div>
+    );
+  }
+
+  return (
+    <div className="px-4 py-4 border-t border-white/[0.06]">
+      <div className="flex items-center gap-2.5 px-1">
+        <div className="w-7 h-7 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-xs font-bold text-black shrink-0">
+          {initial}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-medium text-white truncate">{displayEmail}</p>
+          <p className="text-[10px] text-pink-400 truncate capitalize">{role}</p>
+        </div>
+        <button
+          onClick={signOut}
+          title="Sign out"
+          className="shrink-0 p-1.5 rounded-lg text-zinc-600 hover:text-red-400 hover:bg-red-500/10 transition-all"
+        >
+          <LogOut size={13} />
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
@@ -228,18 +291,8 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         })}
       </nav>
 
-      {/* Footer */}
-      <div className="px-4 py-4 border-t border-white/[0.06]">
-        <div className="flex items-center gap-2.5 px-1">
-          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-xs font-bold text-black shrink-0">
-            D
-          </div>
-          <div className="min-w-0">
-            <p className="text-xs font-medium text-white truncate">Dilip Kumar</p>
-            <p className="text-[10px] text-zinc-600 truncate">Photography Studio</p>
-          </div>
-        </div>
-      </div>
+      {/* Footer — auth state */}
+      <SidebarFooter onNavigate={onNavigate} />
     </aside>
   );
 }
