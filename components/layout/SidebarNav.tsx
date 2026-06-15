@@ -84,9 +84,6 @@ const NAV: NavItem[] = [
     href: "/social",
     icon: Globe,
     activeColor: "text-pink-400",
-    children: [
-      { label: "Settings", href: "/social/settings" },
-    ],
   },
   {
     label: "Marketing",
