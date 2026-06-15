@@ -51,23 +51,3 @@ export function useUserRole(): UserRoleState {
 
   return state;
 }
-
-// Server-side helper: returns the role for the currently authenticated user.
-// Import this ONLY in Server Components / Route Handlers (not client bundles).
-// Usage:  const role = await getServerUserRole();
-export async function getServerUserRole(): Promise<UserRole> {
-  // Dynamic import to avoid pulling server-only modules into client bundles.
-  const { createSupabaseServerClient } = await import("@/lib/supabase/server");
-  const supabase = await createSupabaseServerClient();
-
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", user.id)
-    .single();
-
-  return (profile?.role as UserRole) ?? "member";
-}
