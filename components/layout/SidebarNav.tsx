@@ -18,6 +18,7 @@ import {
   BarChart2,
   LogOut,
   LogIn,
+  Settings,
   type LucideIcon,
 } from "lucide-react";
 import { useUserRole } from "@/lib/auth";
@@ -96,60 +97,80 @@ const NAV: NavItem[] = [
 ];
 
 function SidebarFooter({ onNavigate }: { onNavigate?: () => void }) {
-  const router       = useRouter();
-  const { role, email, loading } = useUserRole();
-  const isSignedIn   = role !== null;
-  const initial      = email ? email[0].toUpperCase() : "?";
-  const displayEmail = email ?? "";
+  const router     = useRouter();
+  const { role }   = useUserRole();
+  const isSignedIn = role !== null;
+  const [open, setOpen] = useState(false);
+
+  const close = () => setOpen(false);
 
   const signOut = async () => {
+    close();
     const supabase = createSupabaseBrowserClient();
     await supabase.auth.signOut();
     onNavigate?.();
     router.refresh();
   };
 
-  if (loading) {
-    return (
-      <div className="px-4 py-4 border-t border-white/[0.06]">
-        <div className="h-8 rounded-lg bg-white/[0.04] animate-pulse" />
-      </div>
-    );
-  }
-
-  if (!isSignedIn) {
-    return (
-      <div className="px-4 py-4 border-t border-white/[0.06]">
-        <Link
-          href="/login"
-          onClick={onNavigate}
-          className="flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs text-zinc-600 hover:text-zinc-300 hover:bg-white/[0.04] transition-all"
-        >
-          <LogIn size={13} />
-          Admin sign-in
-        </Link>
-      </div>
-    );
-  }
-
   return (
-    <div className="px-4 py-4 border-t border-white/[0.06]">
-      <div className="flex items-center gap-2.5 px-1">
+    <div className="relative px-3 py-3 border-t border-white/[0.06]">
+
+      {/* Popup menu — appears above the footer trigger */}
+      {open && (
+        <>
+          {/* invisible backdrop to catch outside clicks */}
+          <div className="fixed inset-0 z-10" onClick={close} />
+          <div className="absolute bottom-full left-3 right-3 mb-2 z-20 bg-[#1c1c21] border border-white/[0.1] rounded-xl shadow-2xl overflow-hidden">
+            {isSignedIn ? (
+              <>
+                <Link
+                  href="/social/settings"
+                  onClick={() => { close(); onNavigate?.(); }}
+                  className="flex items-center gap-2.5 px-4 py-3 text-sm text-zinc-300 hover:bg-white/[0.06] hover:text-white transition-all"
+                >
+                  <Settings size={14} className="text-pink-400" />
+                  Settings
+                </Link>
+                <div className="mx-3 border-t border-white/[0.06]" />
+                <button
+                  onClick={signOut}
+                  className="w-full flex items-center gap-2.5 px-4 py-3 text-sm text-zinc-300 hover:bg-red-500/10 hover:text-red-400 transition-all"
+                >
+                  <LogOut size={14} />
+                  Log out
+                </button>
+              </>
+            ) : (
+              <Link
+                href="/login"
+                onClick={() => { close(); onNavigate?.(); }}
+                className="flex items-center gap-2.5 px-4 py-3 text-sm text-zinc-300 hover:bg-white/[0.06] hover:text-white transition-all"
+              >
+                <LogIn size={14} className="text-pink-400" />
+                Admin sign-in
+              </Link>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* Footer trigger — always shows Dilip Kumar / Photography Studio */}
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-xl hover:bg-white/[0.05] transition-all group"
+      >
         <div className="w-7 h-7 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-xs font-bold text-black shrink-0">
-          {initial}
+          D
         </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-xs font-medium text-white truncate">{displayEmail}</p>
-          <p className="text-[10px] text-pink-400 truncate capitalize">{role}</p>
+        <div className="min-w-0 flex-1 text-left">
+          <p className="text-xs font-medium text-white truncate">Dilip Kumar</p>
+          <p className="text-[10px] text-zinc-500 truncate">Photography Studio</p>
         </div>
-        <button
-          onClick={signOut}
-          title="Sign out"
-          className="shrink-0 p-1.5 rounded-lg text-zinc-600 hover:text-red-400 hover:bg-red-500/10 transition-all"
-        >
-          <LogOut size={13} />
-        </button>
-      </div>
+        <ChevronDown
+          size={12}
+          className={`text-zinc-600 transition-transform duration-200 shrink-0 ${open ? "rotate-180" : ""}`}
+        />
+      </button>
     </div>
   );
 }
