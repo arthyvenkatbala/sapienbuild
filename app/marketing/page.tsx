@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import ConnectionStatusStrip from "./ConnectionStatusStrip";
 
@@ -9,7 +10,7 @@ const AdsTab     = dynamic(() => import("./tabs/AdsTab"),     { ssr: false });
 const SocialTab  = dynamic(() => import("./tabs/SocialTab"),  { ssr: false });
 const LocalTab   = dynamic(() => import("./tabs/LocalTab"),   { ssr: false });
 
-const TABS = ["Traffic", "Ads", "Social", "Local"] as const;
+const TABS = ["Traffic", "Ads", "Social", "Local", "Insights"] as const;
 type Tab = typeof TABS[number];
 
 const DATE_RANGES = [
@@ -25,6 +26,7 @@ interface ConnectionStatus {
 }
 
 export default function MarketingPage() {
+  const router = useRouter();
   const [activeTab,  setActiveTab]  = useState<Tab>("Traffic");
   const [rangeDays,  setRangeDays]  = useState(30);
   const [connStatus, setConnStatus] = useState<ConnectionStatus>({
@@ -98,7 +100,7 @@ export default function MarketingPage() {
           {TABS.map((tab) => (
             <button
               key={tab}
-              onClick={() => setActiveTab(tab)}
+              onClick={() => (tab === "Insights" ? router.push("/marketing/insights") : setActiveTab(tab))}
               className={`px-5 py-2 rounded-lg text-sm font-medium transition-all ${
                 activeTab === tab
                   ? "bg-white/[0.1] text-white shadow-sm"
