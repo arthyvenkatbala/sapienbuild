@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, useEffect, type ReactNode } from "react";
 import {
@@ -11,7 +12,6 @@ import {
   Package,
   Receipt,
   ChevronDown,
-  Camera,
   Menu,
   X,
   Globe,
@@ -94,9 +94,9 @@ const NAV: NavItem[] = [
 ];
 
 function SidebarFooter({ onNavigate }: { onNavigate?: () => void }) {
-  const router     = useRouter();
-  const { role }   = useUserRole();
-  const isSignedIn = role !== null;
+  const router        = useRouter();
+  const { role, name } = useUserRole();
+  const isSignedIn    = role !== null;
   const [open, setOpen] = useState(false);
 
   const close = () => setOpen(false);
@@ -109,6 +109,24 @@ function SidebarFooter({ onNavigate }: { onNavigate?: () => void }) {
     router.refresh();
   };
 
+  if (!isSignedIn) {
+    return (
+      <div className="px-3 py-3 border-t border-white/[0.06]">
+        <Link
+          href="/login"
+          onClick={onNavigate}
+          className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-sm font-medium text-zinc-200 bg-white/[0.06] hover:bg-white/[0.1] transition-all"
+        >
+          <LogIn size={14} className="text-pink-400" />
+          Login
+        </Link>
+      </div>
+    );
+  }
+
+  const displayName = name ?? "Account";
+  const initial      = displayName.charAt(0).toUpperCase();
+
   return (
     <div className="relative px-3 py-3 border-t border-white/[0.06]">
 
@@ -118,50 +136,37 @@ function SidebarFooter({ onNavigate }: { onNavigate?: () => void }) {
           {/* invisible backdrop to catch outside clicks */}
           <div className="fixed inset-0 z-10" onClick={close} />
           <div className="absolute bottom-full left-3 right-3 mb-2 z-20 bg-[#1c1c21] border border-white/[0.1] rounded-xl shadow-2xl overflow-hidden">
-            {isSignedIn ? (
-              <>
-                <Link
-                  href="/social/settings"
-                  onClick={() => { close(); onNavigate?.(); }}
-                  className="flex items-center gap-2.5 px-4 py-3 text-sm text-zinc-300 hover:bg-white/[0.06] hover:text-white transition-all"
-                >
-                  <Settings size={14} className="text-pink-400" />
-                  Settings
-                </Link>
-                <div className="mx-3 border-t border-white/[0.06]" />
-                <button
-                  onClick={signOut}
-                  className="w-full flex items-center gap-2.5 px-4 py-3 text-sm text-zinc-300 hover:bg-red-500/10 hover:text-red-400 transition-all"
-                >
-                  <LogOut size={14} />
-                  Log out
-                </button>
-              </>
-            ) : (
-              <Link
-                href="/login"
-                onClick={() => { close(); onNavigate?.(); }}
-                className="flex items-center gap-2.5 px-4 py-3 text-sm text-zinc-300 hover:bg-white/[0.06] hover:text-white transition-all"
-              >
-                <LogIn size={14} className="text-pink-400" />
-                Admin sign-in
-              </Link>
-            )}
+            <Link
+              href="/social/settings"
+              onClick={() => { close(); onNavigate?.(); }}
+              className="flex items-center gap-2.5 px-4 py-3 text-sm text-zinc-300 hover:bg-white/[0.06] hover:text-white transition-all"
+            >
+              <Settings size={14} className="text-pink-400" />
+              Settings
+            </Link>
+            <div className="mx-3 border-t border-white/[0.06]" />
+            <button
+              onClick={signOut}
+              className="w-full flex items-center gap-2.5 px-4 py-3 text-sm text-zinc-300 hover:bg-red-500/10 hover:text-red-400 transition-all"
+            >
+              <LogOut size={14} />
+              Log out
+            </button>
           </div>
         </>
       )}
 
-      {/* Footer trigger — always shows Dilip Kumar / Photography Studio */}
+      {/* Footer trigger — shows the signed-in user's own name */}
       <button
         onClick={() => setOpen((v) => !v)}
         className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-xl hover:bg-white/[0.05] transition-all group"
       >
         <div className="w-7 h-7 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-xs font-bold text-black shrink-0">
-          D
+          {initial}
         </div>
         <div className="min-w-0 flex-1 text-left">
-          <p className="text-xs font-medium text-white truncate">Dilip Kumar</p>
-          <p className="text-[10px] text-zinc-500 truncate">Photography Studio</p>
+          <p className="text-xs font-medium text-white truncate">{displayName}</p>
+          <p className="text-[10px] text-zinc-500 truncate capitalize">{role}</p>
         </div>
         <ChevronDown
           size={12}
@@ -200,12 +205,12 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
       {/* Header */}
       <div className="px-5 py-5 border-b border-white/[0.06]">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shrink-0">
-            <Camera size={16} className="text-white" />
+          <div className="w-8 h-8 rounded-xl overflow-hidden shrink-0">
+            <Image src="/logo.jpg" alt="One Thousand Tales" width={32} height={32} className="w-full h-full object-cover" />
           </div>
           <div>
             <p className="text-[13px] font-semibold text-white leading-tight">One Thousand Tales</p>
-            <p className="text-[10px] text-zinc-500 mt-0.5 leading-none">OTT Platform</p>
+            <p className="text-[10px] text-zinc-500 mt-0.5 leading-none">Studio Operations Platform</p>
           </div>
         </div>
       </div>

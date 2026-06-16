@@ -2,7 +2,8 @@
 
 import { useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { Camera, Loader2 } from "lucide-react";
+import Image from "next/image";
+import { Loader2 } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
 function LoginContent() {
@@ -30,11 +31,11 @@ function LoginContent() {
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="flex flex-col items-center mb-10">
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center mb-4">
-            <Camera size={26} className="text-white" />
+          <div className="w-14 h-14 rounded-2xl overflow-hidden mb-4">
+            <Image src="/logo.jpg" alt="One Thousand Tales" width={56} height={56} className="w-full h-full object-cover" />
           </div>
           <h1 className="text-xl font-bold text-white">One Thousand Tales</h1>
-          <p className="text-sm text-zinc-500 mt-1">Internal Operations Platform</p>
+          <p className="text-sm text-zinc-500 mt-1">Studio Operations Platform</p>
         </div>
 
         {/* Card */}
