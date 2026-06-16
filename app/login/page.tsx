@@ -7,7 +7,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
 function LoginContent() {
   const searchParams = useSearchParams();
-  const next         = searchParams.get("next") ?? "/social/settings";
+  const next         = searchParams.get("next") ?? "/dashboard";
   const isError      = searchParams.get("error") === "auth_failed";
 
   const [loading, setLoading] = useState(false);
@@ -40,9 +40,9 @@ function LoginContent() {
         {/* Card */}
         <div className="bg-[#111114] border border-white/[0.08] rounded-2xl p-8 space-y-6">
           <div className="text-center">
-            <h2 className="text-sm font-semibold text-white">Admin sign-in required</h2>
+            <h2 className="text-sm font-semibold text-white">Sign in required</h2>
             <p className="text-xs text-zinc-500 mt-1.5">
-              Sign in with your Google account to access Settings.
+              Sign in with your Google account to access the platform.
             </p>
           </div>
 
@@ -73,8 +73,7 @@ function LoginContent() {
         </div>
 
         <p className="text-center text-[11px] text-zinc-700 mt-6">
-          Only studio admins can access Settings.<br />
-          Other pages are available without signing in.
+          New accounts need approval before they can access the platform.
         </p>
       </div>
     </div>

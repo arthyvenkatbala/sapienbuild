@@ -14,6 +14,9 @@ async function fetchApi<T>(path: string, fallback: T): Promise<T> {
     const proto = process.env.NODE_ENV === "production" ? "https" : "http";
     const res = await fetch(`${proto}://${host}${path}`, {
       cache: "no-store",
+      // Forward the session cookie — middleware now requires auth on these
+      // API routes, and this is a server-to-server request with no browser.
+      headers: { cookie: hdrs.get("cookie") ?? "" },
     });
     if (!res.ok) return fallback;
     return res.json() as Promise<T>;

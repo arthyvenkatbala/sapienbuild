@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
-export type UserRole = "admin" | "member" | null;
+export type UserRole = "admin" | "executive" | "member" | null;
 
 export interface UserRoleState {
   role:    UserRole;
