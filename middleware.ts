@@ -5,7 +5,7 @@
 //
 // Flow:
 //   Public path                          → pass through, no auth check
-//   No session, page route                → /login?next=<path>
+//   No session, page route                → / (welcome/sign-in screen)
 //   No session, API route                 → 401 JSON
 //   Session, admin-only path, role!=admin → /access-denied (or 403 JSON)
 //   Session, role is member/none          → /access-denied (or 403 JSON)
@@ -14,10 +14,12 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextRequest, NextResponse } from "next/server";
 
-// Paths that bypass auth entirely — login itself, OAuth callbacks (Supabase
-// Auth + the app's own Google/Meta/GSC/GMB/YouTube/Calendar integrations),
-// and externally-called endpoints (webhooks, cron, public lead forms).
+// Paths that bypass auth entirely — the root welcome/sign-in screen, the
+// deprecated /login alias, OAuth callbacks (Supabase Auth + the app's own
+// Google/Meta/GSC/GMB/YouTube/Calendar integrations), and externally-called
+// endpoints (webhooks, cron, public lead forms).
 const PUBLIC_PREFIXES = [
+  "/",
   "/login",
   "/access-denied",
   "/auth/callback",
@@ -87,9 +89,7 @@ export async function middleware(request: NextRequest) {
     if (isApi) {
       return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     }
-    const loginUrl = new URL("/login", request.url);
-    loginUrl.searchParams.set("next", pathname);
-    return NextResponse.redirect(loginUrl);
+    return NextResponse.redirect(new URL("/", request.url));
   }
 
   const { data: profile } = await supabase

@@ -106,6 +106,7 @@ function SidebarFooter({ onNavigate }: { onNavigate?: () => void }) {
     const supabase = createSupabaseBrowserClient();
     await supabase.auth.signOut();
     onNavigate?.();
+    router.push("/");
     router.refresh();
   };
 
@@ -113,7 +114,7 @@ function SidebarFooter({ onNavigate }: { onNavigate?: () => void }) {
     return (
       <div className="px-3 py-3 border-t border-white/[0.06]">
         <Link
-          href="/login"
+          href="/"
           onClick={onNavigate}
           className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-sm font-medium text-zinc-200 bg-white/[0.06] hover:bg-white/[0.1] transition-all"
         >
