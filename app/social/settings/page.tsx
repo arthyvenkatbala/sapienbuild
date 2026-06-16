@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   Save, Play, Loader2, Check, Folder, Clock, X, Plus,
-  PlayCircle, Settings2, Calendar, Search, MapPin,
+  PlayCircle, Settings2, Calendar, Search, MapPin, Users,
 } from "lucide-react";
 import { useToast } from "@/lib/toast";
 
@@ -33,6 +33,19 @@ interface Settings {
 
 const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
+interface Profile {
+  id:         string;
+  email:      string;
+  role:       "admin" | "executive" | "member";
+  created_at: string;
+}
+
+const ROLE_OPTIONS = [
+  { value: "admin",     label: "Admin" },
+  { value: "executive", label: "Executive" },
+  { value: "member",    label: "Member (no access)" },
+] as const;
+
 function SocialSettingsContent() {
   const toast       = useToast();
   const searchParams = useSearchParams();
@@ -59,19 +72,22 @@ function SocialSettingsContent() {
   const [calConnected,  setCalConnected]  = useState(false);
   const [calExpiry,     setCalExpiry]     = useState<string | null>(null);
   const [newHashtag,   setNewHashtag]   = useState("");
+  const [profiles,      setProfiles]      = useState<Profile[]>([]);
+  const [savingRoleId,  setSavingRoleId]  = useState<string | null>(null);
 
   // ── Load settings ──────────────────────────────────────────────────────────
 
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [settingsRes, runsRes, ytRes, gscRes, gmbRes, calRes] = await Promise.all([
+      const [settingsRes, runsRes, ytRes, gscRes, gmbRes, calRes, profilesRes] = await Promise.all([
         fetch("/api/agent/settings"),
         fetch("/api/agent/runs?limit=1"),
         fetch("/api/youtube/status"),
         fetch("/api/gsc/status"),
         fetch("/api/gmb/status"),
         fetch("/api/calendar/status"),
+        fetch("/api/admin/profiles"),
       ]);
 
       if (settingsRes.ok) {
@@ -116,6 +132,11 @@ function SocialSettingsContent() {
         const d = await calRes.json() as { connected: boolean; expiry?: string | null };
         setCalConnected(d.connected);
         setCalExpiry(d.expiry ?? null);
+      }
+
+      if (profilesRes.ok) {
+        const d = await profilesRes.json() as { profiles?: Profile[] };
+        setProfiles(d.profiles ?? []);
       }
     } catch (e) {
       console.error(e);
@@ -183,6 +204,33 @@ function SocialSettingsContent() {
       toast("Network error", "error");
     } finally {
       setRunningAgent(false);
+    }
+  };
+
+  // ── Team roles ────────────────────────────────────────────────────────────
+
+  const updateRole = async (id: string, role: Profile["role"]) => {
+    setSavingRoleId(id);
+    const prev = profiles;
+    setProfiles((ps) => ps.map((p) => (p.id === id ? { ...p, role } : p)));
+    try {
+      const res = await fetch(`/api/admin/profiles/${id}`, {
+        method:  "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ role }),
+      });
+      if (!res.ok) {
+        setProfiles(prev);
+        const d = await res.json() as { error?: string };
+        toast(d.error ?? "Failed to update role", "error");
+        return;
+      }
+      toast("Role updated");
+    } catch {
+      setProfiles(prev);
+      toast("Network error", "error");
+    } finally {
+      setSavingRoleId(null);
     }
   };
 
@@ -553,6 +601,51 @@ function SocialSettingsContent() {
               </a>
             </div>
           )}
+        </section>
+
+        {/* ─── I. Team Roles ───────────────────────────────────────────────── */}
+        <section className="bg-[#111114] border border-white/[0.07] rounded-2xl p-6">
+          <SectionHead icon={Users} title="Team Roles" />
+          <p className="text-xs text-zinc-500 mb-4">
+            Admins have full access including Settings. Executives can access every page except
+            Settings and can&apos;t trigger new agent runs. Members have no access until assigned a role.
+          </p>
+          <div className="rounded-xl overflow-hidden border border-white/[0.06]">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-white/[0.03] text-left">
+                  <th className="px-4 py-2.5 text-[11px] font-medium text-zinc-500 uppercase tracking-wide">Email</th>
+                  <th className="px-4 py-2.5 text-[11px] font-medium text-zinc-500 uppercase tracking-wide">Role</th>
+                </tr>
+              </thead>
+              <tbody>
+                {profiles.map((p, i) => (
+                  <tr key={p.id} className={i % 2 === 0 ? "bg-transparent" : "bg-white/[0.02]"}>
+                    <td className="px-4 py-2.5 text-white/80">{p.email}</td>
+                    <td className="px-4 py-2.5">
+                      <select
+                        value={p.role}
+                        disabled={savingRoleId === p.id}
+                        onChange={(e) => updateRole(p.id, e.target.value as Profile["role"])}
+                        className="bg-[#0d0d10] border border-white/[0.08] rounded-lg px-2.5 py-1.5 text-xs text-zinc-100 outline-none focus:border-pink-500/40 disabled:opacity-50 transition-all"
+                      >
+                        {ROLE_OPTIONS.map((opt) => (
+                          <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        ))}
+                      </select>
+                    </td>
+                  </tr>
+                ))}
+                {profiles.length === 0 && (
+                  <tr>
+                    <td colSpan={2} className="px-4 py-6 text-center text-xs text-zinc-600">
+                      No signed-in users yet.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </section>
 
         {/* Save button (bottom) */}

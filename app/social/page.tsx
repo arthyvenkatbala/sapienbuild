@@ -724,16 +724,18 @@ function SocialPageContent() {
           <p className="text-xs text-zinc-500">AI-generated suggestions for review and approval</p>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={handleRunAgent}
-            disabled={runStatus === "running"}
-            className="flex items-center gap-1.5 text-xs font-semibold text-white bg-pink-600 hover:bg-pink-500 disabled:opacity-60 disabled:cursor-not-allowed px-4 py-2 rounded-xl transition-all"
-          >
-            {runStatus === "running"
-              ? <><Loader2 size={12} className="animate-spin" /> Generating…</>
-              : <><Sparkles size={12} /> Run Agent Now</>
-            }
-          </button>
+          {isAdmin && (
+            <button
+              onClick={handleRunAgent}
+              disabled={runStatus === "running"}
+              className="flex items-center gap-1.5 text-xs font-semibold text-white bg-pink-600 hover:bg-pink-500 disabled:opacity-60 disabled:cursor-not-allowed px-4 py-2 rounded-xl transition-all"
+            >
+              {runStatus === "running"
+                ? <><Loader2 size={12} className="animate-spin" /> Generating…</>
+                : <><Sparkles size={12} /> Run Agent Now</>
+              }
+            </button>
+          )}
           {isAdmin && (
             <Link
               href="/social/settings"
@@ -856,10 +858,12 @@ function SocialPageContent() {
             </h3>
             {activeFilter === "pending" && (
               <p className="text-xs text-zinc-500 max-w-xs mb-5">
-                Run the agent to generate this week&apos;s content plan — Claude will select the best photos and videos and write captions.
+                {isAdmin
+                  ? "Run the agent to generate this week's content plan — Claude will select the best photos and videos and write captions."
+                  : "Ask an admin to run the agent to generate this week's content plan."}
               </p>
             )}
-            {activeFilter === "pending" && (
+            {activeFilter === "pending" && isAdmin && (
               <button
                 onClick={handleRunAgent}
                 disabled={runStatus === "running"}

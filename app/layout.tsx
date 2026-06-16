@@ -1,5 +1,5 @@
 import "./globals.css";
-import SidebarNav from "@/components/layout/SidebarNav";
+import AppShell from "@/components/layout/AppShell";
 import { ClientProvider } from "@/lib/client-context";
 import { ToastProvider } from "@/lib/toast";
 
@@ -14,12 +14,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="bg-[#0a0a0d] text-white antialiased">
         <ClientProvider>
           <ToastProvider>
-            <div className="min-h-screen flex">
-              <SidebarNav />
-              <div className="flex-1 min-w-0 flex flex-col">
-                {children}
-              </div>
-            </div>
+            <AppShell>{children}</AppShell>
           </ToastProvider>
         </ClientProvider>
       </body>

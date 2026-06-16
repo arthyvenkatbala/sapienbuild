@@ -1,16 +1,16 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
-const CALENDAR_REDIRECT_URI = "https://sapienbuild.vercel.app/api/calendar/callback";
-
-export async function GET() {
+export async function GET(request: NextRequest) {
   const clientId = process.env.GOOGLE_CLIENT_ID;
   if (!clientId) {
     return NextResponse.json({ error: "GOOGLE_CLIENT_ID is not configured." }, { status: 500 });
   }
 
+  const redirectUri = `${request.nextUrl.origin}/api/calendar/callback`;
+
   const params = new URLSearchParams({
     client_id:     clientId,
-    redirect_uri:  CALENDAR_REDIRECT_URI,
+    redirect_uri:  redirectUri,
     response_type: "code",
     scope:         "https://www.googleapis.com/auth/calendar",
     access_type:   "offline",
