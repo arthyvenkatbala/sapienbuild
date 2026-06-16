@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminSupabase } from "@/lib/supabase-admin";
 
-const CALENDAR_REDIRECT_URI = "https://sapienbuild.vercel.app/api/calendar/callback";
-const APP_URL               = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-const TOKEN_ROW_ID          = "00000000-0000-0000-0000-000000000004";
+const TOKEN_ROW_ID = "00000000-0000-0000-0000-000000000004";
 
 export async function GET(request: NextRequest) {
+  const APP_URL = request.nextUrl.origin;
   const code  = request.nextUrl.searchParams.get("code");
   const error = request.nextUrl.searchParams.get("error");
 
@@ -23,7 +22,7 @@ export async function GET(request: NextRequest) {
       code,
       client_id:     clientId,
       client_secret: clientSecret,
-      redirect_uri:  CALENDAR_REDIRECT_URI,
+      redirect_uri:  `${APP_URL}/api/calendar/callback`,
       grant_type:    "authorization_code",
     }),
   });
