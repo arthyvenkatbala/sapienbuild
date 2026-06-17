@@ -45,32 +45,45 @@ export async function GET() {
     if (refreshed) accessToken = refreshed;
   }
 
+  type ChannelStats = {
+    items?: Array<{
+      statistics: {
+        subscriberCount?: string;
+        viewCount?: string;
+        videoCount?: string;
+        hiddenSubscriberCount?: boolean;
+      };
+    }>;
+  };
+
   try {
-    const res = await fetch(
+    // Try personal channel first, then Brand Account channels (managedByMe)
+    const endpoints = [
       "https://www.googleapis.com/youtube/v3/channels?part=statistics&mine=true",
-      {
+      "https://www.googleapis.com/youtube/v3/channels?part=statistics&managedByMe=true",
+    ];
+
+    let stats: { subscriberCount?: string; viewCount?: string; videoCount?: string; hiddenSubscriberCount?: boolean } | undefined;
+
+    for (const endpoint of endpoints) {
+      const res = await fetch(endpoint, {
         headers: { Authorization: `Bearer ${accessToken}` },
         cache:   "no-store",
-      },
-    );
-
-    if (!res.ok) {
-      console.warn("[YouTube] API returned", res.status, await res.text());
-      return NextResponse.json({ connected: true, subscribers: 0, views: 0, videoCount: 0, synced_at: new Date().toISOString() });
+      });
+      if (!res.ok) {
+        console.warn("[YouTube] API returned", res.status, await res.text());
+        continue;
+      }
+      const data = await res.json() as ChannelStats;
+      if (data.items?.length) {
+        stats = data.items[0].statistics;
+        break;
+      }
     }
 
-    type ChannelStats = {
-      items?: Array<{
-        statistics: {
-          subscriberCount?: string;
-          viewCount?: string;
-          videoCount?: string;
-          hiddenSubscriberCount?: boolean;
-        };
-      }>;
-    };
-    const data = await res.json() as ChannelStats;
-    const stats = data.items?.[0]?.statistics;
+    if (!stats) {
+      return NextResponse.json({ connected: true, subscribers: 0, views: 0, videoCount: 0, synced_at: new Date().toISOString() });
+    }
 
     return NextResponse.json({
       connected:    true,
