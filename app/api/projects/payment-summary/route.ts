@@ -32,7 +32,7 @@ export async function GET() {
   // All payments
   const { data: payments, error: pyErr } = await adminSupabase
     .from("payments")
-    .select("id, invoice_id, project_id, amount, payment_type, payment_date, method, notes, created_at")
+    .select("id, invoice_id, project_id, amount, payment_type, payment_date, method, notes, receipt_pdf_data, receipt_number, created_at")
     .order("payment_date", { ascending: true });
 
   if (pyErr) {

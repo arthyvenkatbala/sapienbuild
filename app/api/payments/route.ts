@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminSupabase } from "@/lib/supabase-admin";
+import { generatePaymentReceipt } from "@/lib/generate-receipt";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
@@ -60,5 +61,14 @@ export async function POST(request: NextRequest) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Generate receipt PDF synchronously so it is ready when the UI re-fetches
+  try {
+    await generatePaymentReceipt(data.id);
+  } catch (receiptErr) {
+    // Non-fatal — payment is already saved; receipt can be generated on demand
+    console.error("[payments] Receipt generation failed:", receiptErr);
+  }
+
   return NextResponse.json({ payment: data }, { status: 201 });
 }
