@@ -81,18 +81,30 @@ function PlatformCard({
   );
 }
 
+interface YoutubeData {
+  connected:    boolean;
+  subscribers?: number;
+  views?:       number;
+  videoCount?:  number;
+  synced_at?:   string;
+}
+
 export default function SocialTab() {
   const [posts,   setPosts]   = useState<SocialPost[]>([]);
+  const [youtube, setYoutube] = useState<YoutubeData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/social/posts?limit=5")
-      .then((r) => r.ok ? r.json() : { posts: [] })
-      .then((d: { posts?: SocialPost[] }) => {
-        setPosts(d.posts ?? []);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
+    Promise.allSettled([
+      fetch("/api/social/posts?limit=5").then((r) => r.ok ? r.json() : { posts: [] }),
+      fetch("/api/marketing/youtube").then((r) => r.json()),
+    ]).then(([postsRes, ytRes]) => {
+      if (postsRes.status === "fulfilled")
+        setPosts((postsRes.value as { posts?: SocialPost[] }).posts ?? []);
+      if (ytRes.status === "fulfilled")
+        setYoutube(ytRes.value as YoutubeData);
+      setLoading(false);
+    }).catch(() => setLoading(false));
   }, []);
 
   const placeholderChartData = [
@@ -105,7 +117,18 @@ export default function SocialTab() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <PlatformCard platform="Facebook"  icon="📘" label="Page followers" connected={true}  stat="—" sub="Reach data via Meta API" />
         <PlatformCard platform="Instagram" icon="📷" label="Followers"      connected={true}  stat="—" sub="Connect IG Business account" />
-        <PlatformCard platform="YouTube"   icon="▶️" label="Subscribers"    connected={false} />
+        <PlatformCard
+          platform="YouTube"
+          icon="▶️"
+          label="Subscribers"
+          connected={youtube?.connected ?? false}
+          stat={youtube?.connected && youtube.subscribers !== undefined
+            ? youtube.subscribers.toLocaleString()
+            : undefined}
+          sub={youtube?.connected && youtube.videoCount !== undefined
+            ? `${youtube.videoCount} videos · ${(youtube.views ?? 0).toLocaleString()} views`
+            : undefined}
+        />
         <PlatformCard platform="FB Pixel"  icon="🎯" label="PageView events" connected={true} stat="Active" sub={`Pixel ID: ${process.env.NEXT_PUBLIC_META_PIXEL_ID ?? "Configured"}`} />
       </div>
 

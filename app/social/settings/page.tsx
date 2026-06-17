@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import {
   Save, Play, Loader2, Check, Folder, Clock, X, Plus,
   PlayCircle, Settings2, Calendar, Search, MapPin, Users,
+  BarChart2, TrendingUp,
 } from "lucide-react";
 import { useToast } from "@/lib/toast";
 
@@ -69,9 +70,14 @@ function SocialSettingsContent() {
   const [gscSiteUrl,   setGscSiteUrl]   = useState<string | null>(null);
   const [gmbConnected,  setGmbConnected]  = useState(false);
   const [gmbLocation,   setGmbLocation]   = useState<string | null>(null);
-  const [calConnected,  setCalConnected]  = useState(false);
-  const [calExpiry,     setCalExpiry]     = useState<string | null>(null);
-  const [newHashtag,   setNewHashtag]   = useState("");
+  const [calConnected,    setCalConnected]    = useState(false);
+  const [calExpiry,       setCalExpiry]       = useState<string | null>(null);
+  const [ga4Connected,    setGa4Connected]    = useState(false);
+  const [ga4PropertyId,   setGa4PropertyId]   = useState<string | null>(null);
+  const [gadsConnected,   setGadsConnected]   = useState(false);
+  const [gadsCustomerId,  setGadsCustomerId]  = useState<string | null>(null);
+  const [gadsAccountName, setGadsAccountName] = useState<string | null>(null);
+  const [newHashtag,      setNewHashtag]      = useState("");
   const [profiles,      setProfiles]      = useState<Profile[]>([]);
   const [savingRoleId,  setSavingRoleId]  = useState<string | null>(null);
 
@@ -80,13 +86,15 @@ function SocialSettingsContent() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [settingsRes, runsRes, ytRes, gscRes, gmbRes, calRes, profilesRes] = await Promise.all([
+      const [settingsRes, runsRes, ytRes, gscRes, gmbRes, calRes, ga4Res, gadsRes, profilesRes] = await Promise.all([
         fetch("/api/agent/settings"),
         fetch("/api/agent/runs?limit=1"),
         fetch("/api/youtube/status"),
         fetch("/api/gsc/status"),
         fetch("/api/gmb/status"),
         fetch("/api/calendar/status"),
+        fetch("/api/ga4/status"),
+        fetch("/api/google-ads/status"),
         fetch("/api/admin/profiles"),
       ]);
 
@@ -134,6 +142,19 @@ function SocialSettingsContent() {
         setCalExpiry(d.expiry ?? null);
       }
 
+      if (ga4Res.ok) {
+        const d = await ga4Res.json() as { connected: boolean; property_id?: string | null };
+        setGa4Connected(d.connected);
+        setGa4PropertyId(d.property_id ?? null);
+      }
+
+      if (gadsRes.ok) {
+        const d = await gadsRes.json() as { connected: boolean; customer_id?: string | null; account_name?: string | null };
+        setGadsConnected(d.connected);
+        setGadsCustomerId(d.customer_id ?? null);
+        setGadsAccountName(d.account_name ?? null);
+      }
+
       if (profilesRes.ok) {
         const d = await profilesRes.json() as { profiles?: Profile[] };
         setProfiles(d.profiles ?? []);
@@ -162,6 +183,14 @@ function SocialSettingsContent() {
     const calStatus = searchParams.get("calendar");
     if (calStatus === "connected") toast("Google Calendar connected!");
     if (calStatus === "error")     toast("Google Calendar connection failed", "error");
+
+    const ga4Status = searchParams.get("ga4");
+    if (ga4Status === "connected") toast("Google Analytics (GA4) connected!");
+    if (ga4Status === "error")     toast("GA4 connection failed", "error");
+
+    const gadsStatus = searchParams.get("google-ads");
+    if (gadsStatus === "connected") toast("Google Ads connected!");
+    if (gadsStatus === "error")     toast("Google Ads connection failed", "error");
   }, [loadData, searchParams, toast]);
 
   // ── Save settings ──────────────────────────────────────────────────────────
@@ -603,7 +632,96 @@ function SocialSettingsContent() {
           )}
         </section>
 
-        {/* ─── I. Team Roles ───────────────────────────────────────────────── */}
+        {/* ─── I. Google Analytics (GA4) ──────────────────────────────────── */}
+        <section className="bg-[#111114] border border-white/[0.07] rounded-2xl p-6">
+          <SectionHead icon={BarChart2} title="Google Analytics (GA4)" />
+          {ga4Connected ? (
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="flex items-center gap-2 text-sm text-green-400 font-medium">
+                  <Check size={14} /> GA4 connected
+                </p>
+                {ga4PropertyId && (
+                  <p className="text-xs text-zinc-500 mt-0.5">Property: {ga4PropertyId}</p>
+                )}
+                <p className="text-xs text-zinc-600 mt-1">
+                  Session, user, and traffic source data will appear in the Marketing → Traffic tab.
+                </p>
+              </div>
+              <a
+                href="/api/ga4/auth"
+                className="text-xs text-zinc-600 hover:text-zinc-400 underline transition-colors"
+              >
+                Reconnect
+              </a>
+            </div>
+          ) : (
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-sm text-zinc-400">
+                  Connect Google Analytics to pull live session and traffic data into the Marketing dashboard.
+                </p>
+                <p className="text-[10px] text-zinc-600 mt-1.5">
+                  Requires the Analytics Data API enabled in Google Cloud and read access to your GA4 property.
+                </p>
+              </div>
+              <a
+                href="/api/ga4/auth"
+                className="shrink-0 flex items-center gap-2 text-xs font-medium text-white bg-orange-600 hover:bg-orange-500 px-4 py-2 rounded-xl transition-all"
+              >
+                <BarChart2 size={13} /> Connect GA4
+              </a>
+            </div>
+          )}
+        </section>
+
+        {/* ─── J. Google Ads ───────────────────────────────────────────────── */}
+        <section className="bg-[#111114] border border-white/[0.07] rounded-2xl p-6">
+          <SectionHead icon={TrendingUp} title="Google Ads" />
+          {gadsConnected ? (
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="flex items-center gap-2 text-sm text-green-400 font-medium">
+                  <Check size={14} /> Google Ads connected
+                </p>
+                {gadsAccountName && (
+                  <p className="text-xs text-zinc-500 mt-0.5">Account: {gadsAccountName}</p>
+                )}
+                {gadsCustomerId && (
+                  <p className="text-xs text-zinc-600">Customer ID: {gadsCustomerId}</p>
+                )}
+                <p className="text-xs text-zinc-600 mt-1">
+                  Campaign spend, clicks, and conversions will appear in the Marketing → Ads tab.
+                </p>
+              </div>
+              <a
+                href="/api/google-ads/auth"
+                className="text-xs text-zinc-600 hover:text-zinc-400 underline transition-colors"
+              >
+                Reconnect
+              </a>
+            </div>
+          ) : (
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-sm text-zinc-400">
+                  Connect Google Ads to pull live campaign performance data into the Marketing dashboard.
+                </p>
+                <p className="text-[10px] text-zinc-600 mt-1.5">
+                  Requires Google Ads API access and a developer token. Your existing Customer ID 379-721-4027 will be auto-detected.
+                </p>
+              </div>
+              <a
+                href="/api/google-ads/auth"
+                className="shrink-0 flex items-center gap-2 text-xs font-medium text-white bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded-xl transition-all"
+              >
+                <TrendingUp size={13} /> Connect Google Ads
+              </a>
+            </div>
+          )}
+        </section>
+
+        {/* ─── L. Team Roles ───────────────────────────────────────────────── */}
         <section className="bg-[#111114] border border-white/[0.07] rounded-2xl p-6">
           <SectionHead icon={Users} title="Team Roles" />
           <p className="text-xs text-zinc-500 mb-4">

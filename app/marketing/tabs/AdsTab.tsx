@@ -7,6 +7,25 @@ import {
   Tooltip, ResponsiveContainer,
 } from "recharts";
 
+interface GoogleAdsData {
+  connected:    boolean;
+  customer_id?: string | null;
+  account_name?: string | null;
+  totalSpend:   number;
+  clicks:       number;
+  conversions:  number;
+  campaigns:    Array<{
+    id:          string;
+    name:        string;
+    status:      string;
+    spend:       number;
+    clicks:      number;
+    conversions: number;
+  }>;
+  synced_at?:   string;
+  error?:       string;
+}
+
 interface MetaAdsData {
   totalSpend:  number;
   impressions: number;
@@ -48,20 +67,29 @@ const STATUS_STYLE: Record<string, string> = {
 };
 
 export default function AdsTab({ days }: { days: number }) {
-  const [data,    setData]    = useState<MetaAdsData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error,   setError]   = useState(false);
+  const [data,        setData]        = useState<MetaAdsData | null>(null);
+  const [googleAds,   setGoogleAds]   = useState<GoogleAdsData | null>(null);
+  const [loading,     setLoading]     = useState(true);
+  const [error,       setError]       = useState(false);
 
   useEffect(() => {
     setLoading(true);
     setError(false);
-    fetch(`/api/marketing/meta-ads?days=${days}`)
-      .then((r) => r.json())
-      .then((d: MetaAdsData & { error?: string }) => {
+    Promise.allSettled([
+      fetch(`/api/marketing/meta-ads?days=${days}`).then((r) => r.json()),
+      fetch(`/api/marketing/google-ads?days=${days}`).then((r) => r.json()),
+    ]).then(([metaRes, gadsRes]) => {
+      if (metaRes.status === "fulfilled") {
+        const d = metaRes.value as MetaAdsData & { error?: string };
         if (d.error) { setError(true); } else { setData(d); }
-        setLoading(false);
-      })
-      .catch(() => { setError(true); setLoading(false); });
+      } else {
+        setError(true);
+      }
+      if (gadsRes.status === "fulfilled") {
+        setGoogleAds(gadsRes.value as GoogleAdsData);
+      }
+      setLoading(false);
+    });
   }, [days]);
 
   const statCards = [
@@ -164,18 +192,92 @@ export default function AdsTab({ days }: { days: number }) {
         )}
       </div>
 
-      {/* Google Ads placeholder */}
+      {/* Google Ads — live data */}
       <div className="bg-[#111114] border border-white/[0.07] rounded-2xl p-5">
-        <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-semibold text-white">Google Ads</h3>
-          <span className="px-2.5 py-1 rounded-full bg-green-500/10 border border-green-500/20 text-green-400 text-[10px] font-medium">
-            Account Ready
-          </span>
+          {googleAds?.connected ? (
+            <span className="px-2.5 py-1 rounded-full bg-green-500/10 border border-green-500/20 text-green-400 text-[10px] font-medium">
+              Connected
+            </span>
+          ) : (
+            <a
+              href="/social/settings"
+              className="text-xs text-blue-400 hover:text-blue-300 underline transition-colors"
+            >
+              Connect in Settings
+            </a>
+          )}
         </div>
-        <p className="text-xs text-zinc-500 mb-1">Customer ID: 379-721-4027</p>
-        <p className="text-xs text-zinc-600 mt-3">
-          No campaigns running yet. Data will appear here once campaigns are live.
-        </p>
+
+        {googleAds?.connected ? (
+          <>
+            {googleAds.account_name && (
+              <p className="text-xs text-zinc-500 mb-1">Account: {googleAds.account_name}</p>
+            )}
+            {googleAds.customer_id && (
+              <p className="text-xs text-zinc-600 mb-3">Customer ID: {googleAds.customer_id}</p>
+            )}
+            {/* Summary row */}
+            <div className="grid grid-cols-3 gap-3 mb-4">
+              {[
+                { label: "Spend",       value: `₹${googleAds.totalSpend.toLocaleString("en-IN")}` },
+                { label: "Clicks",      value: googleAds.clicks.toLocaleString() },
+                { label: "Conversions", value: googleAds.conversions.toString() },
+              ].map(({ label, value }) => (
+                <div key={label} className="bg-white/[0.03] rounded-xl p-3">
+                  <p className="text-xs text-zinc-500">{label}</p>
+                  <p className="text-base font-bold text-white mt-0.5">{value}</p>
+                </div>
+              ))}
+            </div>
+            {/* Campaigns table or empty state */}
+            {googleAds.campaigns.length === 0 ? (
+              <p className="text-xs text-zinc-600">
+                No active campaigns found for this period. Data will appear here once campaigns are live.
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-white/[0.05]">
+                      {["Campaign", "Status", "Spend", "Clicks", "Conversions"].map((h) => (
+                        <th key={h} className="text-left text-zinc-500 font-medium py-2 pr-4">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {googleAds.campaigns.map((c) => (
+                      <tr key={c.id} className="border-b border-white/[0.03] hover:bg-white/[0.02]">
+                        <td className="py-2.5 pr-4 text-zinc-300 max-w-[180px] truncate">{c.name}</td>
+                        <td className="py-2.5 pr-4">
+                          <span className={`px-2 py-0.5 rounded-full border text-[10px] font-medium ${STATUS_STYLE[c.status] ?? "bg-white/[0.04] border-white/[0.07] text-zinc-500"}`}>
+                            {c.status}
+                          </span>
+                        </td>
+                        <td className="py-2.5 pr-4 text-white font-medium">₹{c.spend.toLocaleString("en-IN")}</td>
+                        <td className="py-2.5 pr-4 text-zinc-400">{c.clicks.toLocaleString()}</td>
+                        <td className="py-2.5 pr-4 text-zinc-400">{c.conversions}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {googleAds.synced_at && (
+              <p className="text-[10px] text-zinc-600 mt-3">
+                Last synced: {new Date(googleAds.synced_at).toLocaleString("en-IN", {
+                  timeZone: "Asia/Kolkata", day: "numeric", month: "short",
+                  hour: "2-digit", minute: "2-digit",
+                })} IST
+              </p>
+            )}
+          </>
+        ) : (
+          <p className="text-xs text-zinc-600">
+            Connect Google Ads in Settings to see campaign spend, clicks, and conversions here.
+          </p>
+        )}
       </div>
 
       {/* LinkedIn Ads placeholder */}
