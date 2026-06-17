@@ -23,6 +23,9 @@ interface ConnectionStatus {
   gscConnected: boolean;
   gmbConnected: boolean;
   ytConnected:  boolean;
+  fbConnected:  boolean;
+  igConnected:  boolean;
+  pixelConfigured: boolean;
 }
 
 export default function MarketingPage() {
@@ -30,9 +33,12 @@ export default function MarketingPage() {
   const [activeTab,  setActiveTab]  = useState<Tab>("Traffic");
   const [rangeDays,  setRangeDays]  = useState(30);
   const [connStatus, setConnStatus] = useState<ConnectionStatus>({
-    gscConnected: false,
-    gmbConnected: false,
-    ytConnected:  false,
+    gscConnected:    false,
+    gmbConnected:    false,
+    ytConnected:     false,
+    fbConnected:     false,
+    igConnected:     false,
+    pixelConfigured: false,
   });
 
   useEffect(() => {
@@ -40,11 +46,17 @@ export default function MarketingPage() {
       fetch("/api/gsc/status").then((r) => r.json()),
       fetch("/api/gmb/status").then((r) => r.json()),
       fetch("/api/youtube/status").then((r) => r.json()),
-    ]).then(([gsc, gmb, yt]) => {
+      fetch("/api/marketing/facebook?days=7").then((r) => r.json()),
+      fetch("/api/marketing/instagram?days=7").then((r) => r.json()),
+      fetch("/api/marketing/pixel?days=7").then((r) => r.json()),
+    ]).then(([gsc, gmb, yt, fb, ig, px]) => {
       setConnStatus({
-        gscConnected: gsc.status  === "fulfilled" && (gsc.value  as { connected?: boolean }).connected  === true,
-        gmbConnected: gmb.status  === "fulfilled" && (gmb.value  as { connected?: boolean }).connected  === true,
-        ytConnected:  yt.status   === "fulfilled" && (yt.value   as { connected?: boolean }).connected  === true,
+        gscConnected:    gsc.status === "fulfilled" && (gsc.value as { connected?: boolean }).connected === true,
+        gmbConnected:    gmb.status === "fulfilled" && (gmb.value as { connected?: boolean }).connected === true,
+        ytConnected:     yt.status  === "fulfilled" && (yt.value  as { connected?: boolean }).connected === true,
+        fbConnected:     fb.status  === "fulfilled" && (fb.value  as { connected?: boolean }).connected === true,
+        igConnected:     ig.status  === "fulfilled" && (ig.value  as { connected?: boolean }).connected === true,
+        pixelConfigured: px.status  === "fulfilled" && (px.value  as { configured?: boolean }).configured === true,
       });
     });
   }, []);
@@ -53,9 +65,10 @@ export default function MarketingPage() {
     { label: "Google Search Console",  connected: connStatus.gscConnected },
     { label: "Google Analytics 4",     connected: true },
     { label: "Meta Ads",               connected: true },
-    { label: "Facebook & Instagram",   connected: true },
+    { label: "Facebook",               connected: connStatus.fbConnected },
+    { label: "Instagram",              connected: connStatus.igConnected },
     { label: "Microsoft Clarity",      connected: true },
-    { label: "FB Pixel",               connected: true },
+    { label: "FB Pixel",               connected: connStatus.pixelConfigured },
     { label: "Google My Business",     connected: connStatus.gmbConnected },
     { label: "YouTube",                connected: connStatus.ytConnected  },
     { label: "Google Ads",             connected: true },
@@ -115,7 +128,7 @@ export default function MarketingPage() {
         {/* Tab content */}
         {activeTab === "Traffic" && <TrafficTab days={rangeDays} />}
         {activeTab === "Ads"     && <AdsTab     days={rangeDays} />}
-        {activeTab === "Social"  && <SocialTab  />}
+        {activeTab === "Social"  && <SocialTab  days={rangeDays} />}
         {activeTab === "Local"   && <LocalTab   />}
 
       </main>

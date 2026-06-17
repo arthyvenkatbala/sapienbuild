@@ -16,6 +16,48 @@ interface SocialPost {
   created_at: string;
 }
 
+interface YoutubeData {
+  connected:    boolean;
+  subscribers?: number;
+  views?:       number;
+  videoCount?:  number;
+  synced_at?:   string;
+}
+
+interface FacebookData {
+  connected:        boolean;
+  name?:            string;
+  followers?:       number;
+  reach?:           number;
+  engagedUsers?:    number;
+  postEngagements?: number;
+  synced_at?:       string;
+  error?:           string;
+}
+
+interface InstagramData {
+  connected:    boolean;
+  username?:    string | null;
+  followers?:   number;
+  mediaCount?:  number;
+  reach?:       number;
+  impressions?: number;
+  synced_at?:   string;
+  reason?:      string;
+  error?:       string;
+}
+
+interface PixelData {
+  configured:    boolean;
+  pixelId?:      string;
+  pixelName?:    string | null;
+  lastFiredTime?: string | null;
+  pageViews?:    number;
+  leads?:        number;
+  purchases?:    number;
+  synced_at?:    string;
+}
+
 const PLATFORM_COLOR: Record<string, string> = {
   facebook:  "#1877f2",
   instagram: "#e91e8c",
@@ -46,14 +88,15 @@ function ChartTooltip({ active, payload, label }: any) {
 }
 
 function PlatformCard({
-  platform, icon, stat, label, sub, connected,
+  platform, icon, stat, label, sub, connected, notConfigured,
 }: {
-  platform:  string;
-  icon:      string;
-  stat?:     string;
-  label:     string;
-  sub?:      string;
-  connected: boolean;
+  platform:       string;
+  icon:           string;
+  stat?:          string;
+  label:          string;
+  sub?:           string;
+  connected:      boolean;
+  notConfigured?: boolean;
 }) {
   return (
     <div className="bg-[#111114] border border-white/[0.07] rounded-2xl p-5">
@@ -65,7 +108,9 @@ function PlatformCard({
             <span className="w-1 h-1 rounded-full bg-green-400 animate-pulse" />Active
           </span>
         ) : (
-          <span className="ml-auto text-[10px] text-zinc-600">Not connected</span>
+          <span className="ml-auto text-[10px] text-zinc-600">
+            {notConfigured ? "Not connected" : "Not connected"}
+          </span>
         )}
       </div>
       {connected && stat ? (
@@ -75,37 +120,82 @@ function PlatformCard({
           {sub && <p className="text-xs text-zinc-600 mt-0.5">{sub}</p>}
         </>
       ) : (
-        <p className="text-xs text-zinc-600">Connect in Settings to see data</p>
+        <p className="text-xs text-zinc-600">
+          {notConfigured ? "Connect in Settings to see data" : "Connect in Settings to see data"}
+        </p>
       )}
     </div>
   );
 }
 
-interface YoutubeData {
-  connected:    boolean;
-  subscribers?: number;
-  views?:       number;
-  videoCount?:  number;
-  synced_at?:   string;
+function fmtTime(iso: string): string {
+  return new Date(iso).toLocaleString("en-IN", {
+    timeZone: "Asia/Kolkata",
+    day:      "numeric",
+    month:    "short",
+    hour:     "2-digit",
+    minute:   "2-digit",
+  }) + " IST";
 }
 
-export default function SocialTab() {
-  const [posts,   setPosts]   = useState<SocialPost[]>([]);
-  const [youtube, setYoutube] = useState<YoutubeData | null>(null);
-  const [loading, setLoading] = useState(true);
+export default function SocialTab({ days = 30 }: { days?: number }) {
+  const [posts,     setPosts]     = useState<SocialPost[]>([]);
+  const [youtube,   setYoutube]   = useState<YoutubeData | null>(null);
+  const [facebook,  setFacebook]  = useState<FacebookData | null>(null);
+  const [instagram, setInstagram] = useState<InstagramData | null>(null);
+  const [pixel,     setPixel]     = useState<PixelData | null>(null);
+  const [loading,   setLoading]   = useState(true);
 
   useEffect(() => {
+    setLoading(true);
     Promise.allSettled([
       fetch("/api/social/posts?limit=5").then((r) => r.ok ? r.json() : { posts: [] }),
-      fetch("/api/marketing/youtube").then((r) => r.json()),
-    ]).then(([postsRes, ytRes]) => {
-      if (postsRes.status === "fulfilled")
-        setPosts((postsRes.value as { posts?: SocialPost[] }).posts ?? []);
-      if (ytRes.status === "fulfilled")
-        setYoutube(ytRes.value as YoutubeData);
+      fetch(`/api/marketing/youtube`).then((r) => r.json()),
+      fetch(`/api/marketing/facebook?days=${days}`).then((r) => r.json()),
+      fetch(`/api/marketing/instagram?days=${days}`).then((r) => r.json()),
+      fetch(`/api/marketing/pixel?days=${days}`).then((r) => r.json()),
+    ]).then(([postsRes, ytRes, fbRes, igRes, pixelRes]) => {
+      if (postsRes.status  === "fulfilled") setPosts((postsRes.value as { posts?: SocialPost[] }).posts ?? []);
+      if (ytRes.status     === "fulfilled") setYoutube(ytRes.value as YoutubeData);
+      if (fbRes.status     === "fulfilled") setFacebook(fbRes.value as FacebookData);
+      if (igRes.status     === "fulfilled") setInstagram(igRes.value as InstagramData);
+      if (pixelRes.status  === "fulfilled") setPixel(pixelRes.value as PixelData);
       setLoading(false);
     }).catch(() => setLoading(false));
-  }, []);
+  }, [days]);
+
+  // Build Facebook sub-text: reach + engaged users if available
+  const fbSub = facebook?.connected
+    ? [
+        facebook.reach        ? `${facebook.reach.toLocaleString()} reach`         : null,
+        facebook.engagedUsers ? `${facebook.engagedUsers.toLocaleString()} engaged` : null,
+      ].filter(Boolean).join(" · ") || `last ${days} days`
+    : undefined;
+
+  // Instagram sub-text
+  const igSub = instagram?.connected
+    ? [
+        instagram.mediaCount ? `${instagram.mediaCount} posts` : null,
+        instagram.reach       ? `${instagram.reach.toLocaleString()} reach`       : null,
+      ].filter(Boolean).join(" · ") || undefined
+    : instagram?.reason === "no_ig_account"
+    ? "Link Instagram Business to your Facebook page in Page Settings"
+    : undefined;
+
+  // Pixel stat: show lastFiredTime if no event counts, or pageViews count
+  const pixelStat = pixel?.configured
+    ? (pixel.pageViews ?? 0) > 0
+      ? pixel.pageViews!.toLocaleString()
+      : "Active"
+    : undefined;
+
+  const pixelSub = pixel?.configured
+    ? [
+        pixel.pixelId ? `ID: ${pixel.pixelId}` : null,
+        pixel.lastFiredTime ? `Last fired: ${fmtTime(pixel.lastFiredTime)}` : null,
+        (pixel.leads ?? 0) > 0 ? `${pixel.leads} leads` : null,
+      ].filter(Boolean).join(" · ") || undefined
+    : undefined;
 
   const placeholderChartData = [
     { date: "Jun 1" }, { date: "Jun 5" }, { date: "Jun 10" }, { date: "Jun 12" },
@@ -115,8 +205,34 @@ export default function SocialTab() {
     <div className="space-y-5">
       {/* Platform stat cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <PlatformCard platform="Facebook"  icon="📘" label="Page followers" connected={true}  stat="—" sub="Reach data via Meta API" />
-        <PlatformCard platform="Instagram" icon="📷" label="Followers"      connected={true}  stat="—" sub="Connect IG Business account" />
+
+        {/* Facebook */}
+        <PlatformCard
+          platform="Facebook"
+          icon="📘"
+          label="Page followers"
+          connected={facebook?.connected ?? false}
+          stat={!loading && facebook?.connected && facebook.followers !== undefined
+            ? facebook.followers.toLocaleString()
+            : undefined}
+          sub={!loading ? fbSub : undefined}
+          notConfigured={!loading && !facebook?.connected}
+        />
+
+        {/* Instagram */}
+        <PlatformCard
+          platform="Instagram"
+          icon="📷"
+          label={instagram?.username ? `@${instagram.username}` : "Followers"}
+          connected={instagram?.connected ?? false}
+          stat={!loading && instagram?.connected && instagram.followers !== undefined
+            ? instagram.followers.toLocaleString()
+            : undefined}
+          sub={!loading ? igSub : undefined}
+          notConfigured={!loading && !instagram?.connected}
+        />
+
+        {/* YouTube */}
         <PlatformCard
           platform="YouTube"
           icon="▶️"
@@ -128,11 +244,32 @@ export default function SocialTab() {
           sub={youtube?.connected && youtube.videoCount !== undefined
             ? `${youtube.videoCount} videos · ${(youtube.views ?? 0).toLocaleString()} views`
             : undefined}
+          notConfigured={!loading && !youtube?.connected}
         />
-        <PlatformCard platform="FB Pixel"  icon="🎯" label="PageView events" connected={true} stat="Active" sub={`Pixel ID: ${process.env.NEXT_PUBLIC_META_PIXEL_ID ?? "Configured"}`} />
+
+        {/* FB Pixel */}
+        <PlatformCard
+          platform="FB Pixel"
+          icon="🎯"
+          label="Page views (ad-attributed)"
+          connected={pixel?.configured ?? false}
+          stat={!loading ? pixelStat : undefined}
+          sub={!loading ? pixelSub : undefined}
+          notConfigured={!loading && !pixel?.configured}
+        />
+
       </div>
 
-      {/* Reach chart placeholder */}
+      {/* Synced timestamps row */}
+      {!loading && (facebook?.synced_at || instagram?.synced_at) && (
+        <p className="text-[10px] text-zinc-600">
+          Social data synced:{" "}
+          {fmtTime((facebook?.synced_at ?? instagram?.synced_at)!)}
+          {" · "}Follower counts update in real-time from Meta API.
+        </p>
+      )}
+
+      {/* Reach chart — placeholder until daily series data is available */}
       <div className="bg-[#111114] border border-white/[0.07] rounded-2xl p-5">
         <h3 className="text-sm font-semibold text-white mb-0.5">Reach Over Time</h3>
         <p className="text-xs text-zinc-500 mb-4">Facebook · Instagram · YouTube</p>
@@ -150,8 +287,36 @@ export default function SocialTab() {
             </LineChart>
           </ResponsiveContainer>
         </div>
-        <p className="text-xs text-zinc-600 mt-2">Connect platform accounts to see live reach data.</p>
+        <p className="text-xs text-zinc-600 mt-2">
+          Daily reach series requires a separate cron-cached collection (FR-31 known gap).
+          Current data: follower counts and total reach for the selected period above.
+        </p>
       </div>
+
+      {/* FB/IG engagement detail — only when connected */}
+      {!loading && (facebook?.connected || instagram?.connected) && (
+        <div className="bg-[#111114] border border-white/[0.07] rounded-2xl p-5">
+          <h3 className="text-sm font-semibold text-white mb-4">Page Engagement</h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {[
+              { label: "FB Followers",  value: facebook?.connected  ? facebook.followers?.toLocaleString()          : "—" },
+              { label: "FB Reach",      value: facebook?.connected  ? facebook.reach?.toLocaleString()              : "—" },
+              { label: "FB Engaged",    value: facebook?.connected  ? facebook.engagedUsers?.toLocaleString()       : "—" },
+              { label: "IG Followers",  value: instagram?.connected ? instagram.followers?.toLocaleString()         : instagram?.reason === "no_ig_account" ? "Not linked" : "—" },
+            ].map(({ label, value }) => (
+              <div key={label} className="bg-white/[0.03] rounded-xl p-3">
+                <p className="text-[10px] text-zinc-500 uppercase tracking-wide">{label}</p>
+                <p className="text-lg font-bold text-white mt-1">{value ?? "—"}</p>
+              </div>
+            ))}
+          </div>
+          {instagram?.reason === "no_ig_account" && (
+            <p className="text-[10px] text-amber-400/70 mt-3">
+              No Instagram Business account linked. Go to your Facebook Page Settings → Instagram to connect it.
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Recent posts */}
       <div className="bg-[#111114] border border-white/[0.07] rounded-2xl p-5">
