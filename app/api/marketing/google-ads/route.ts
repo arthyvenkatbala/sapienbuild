@@ -25,14 +25,13 @@ async function refreshAccessToken(refreshToken: string): Promise<string | null> 
   return data.access_token;
 }
 
-// Build an inclusive date range that includes today
-function gaqlDateRange(days: number): string {
-  const today   = new Date();
-  const todayStr = today.toISOString().split("T")[0];
-  const past    = new Date(today);
+function gaqlDateRange(days: number): { start: string; end: string } {
+  const today = new Date();
+  const end   = today.toISOString().split("T")[0];
+  const past  = new Date(today);
   past.setDate(past.getDate() - days);
-  const pastStr = past.toISOString().split("T")[0];
-  return `BETWEEN '${pastStr}' AND '${todayStr}'`;
+  const start = past.toISOString().split("T")[0];
+  return { start, end };
 }
 
 const EMPTY_RESPONSE = (customerId: string | null, accountName: string | null) => ({
@@ -75,8 +74,8 @@ export async function GET(request: NextRequest) {
     if (refreshed) accessToken = refreshed;
   }
 
-  const dateRange = gaqlDateRange(days);
-  const query     = `
+  const { start, end } = gaqlDateRange(days);
+  const query = `
     SELECT
       campaign.id,
       campaign.name,
@@ -85,7 +84,8 @@ export async function GET(request: NextRequest) {
       metrics.clicks,
       metrics.conversions
     FROM campaign
-    WHERE segments.date ${dateRange}
+    WHERE segments.date >= '${start}'
+      AND segments.date <= '${end}'
       AND campaign.status != 'REMOVED'
     ORDER BY metrics.cost_micros DESC
     LIMIT 20
