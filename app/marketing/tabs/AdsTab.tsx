@@ -210,6 +210,9 @@ export default function AdsTab({ days }: { days: number }) {
           )}
         </div>
 
+        {googleAds?.error && (
+          <p className="text-xs text-red-400/70 mb-3 font-mono">{googleAds.error}</p>
+        )}
         {googleAds?.connected ? (
           <>
             {googleAds.account_name && (

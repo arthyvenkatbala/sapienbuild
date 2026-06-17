@@ -25,11 +25,14 @@ async function refreshAccessToken(refreshToken: string): Promise<string | null> 
   return data.access_token;
 }
 
-// Maps day ranges to Google Ads GAQL date range literals
+// Build an inclusive date range that includes today
 function gaqlDateRange(days: number): string {
-  if (days <= 7)  return "LAST_7_DAYS";
-  if (days <= 30) return "LAST_30_DAYS";
-  return "LAST_90_DAYS";
+  const today   = new Date();
+  const todayStr = today.toISOString().split("T")[0];
+  const past    = new Date(today);
+  past.setDate(past.getDate() - days);
+  const pastStr = past.toISOString().split("T")[0];
+  return `BETWEEN '${pastStr}' AND '${todayStr}'`;
 }
 
 const EMPTY_RESPONSE = (customerId: string | null, accountName: string | null) => ({
@@ -82,7 +85,7 @@ export async function GET(request: NextRequest) {
       metrics.clicks,
       metrics.conversions
     FROM campaign
-    WHERE segments.date DURING ${dateRange}
+    WHERE segments.date ${dateRange}
       AND campaign.status != 'REMOVED'
     ORDER BY metrics.cost_micros DESC
     LIMIT 20
@@ -105,9 +108,12 @@ export async function GET(request: NextRequest) {
     );
 
     if (!res.ok) {
-      // No campaigns or API permission issue — still a real connection
-      console.warn("[Google Ads] API returned", res.status, await res.text());
-      return NextResponse.json(EMPTY_RESPONSE(customerId, row.account_name));
+      const errText = await res.text();
+      console.warn("[Google Ads] API returned", res.status, errText);
+      return NextResponse.json({
+        ...EMPTY_RESPONSE(customerId, row.account_name),
+        error: `Google Ads API error ${res.status}: ${errText.slice(0, 200)}`,
+      });
     }
 
     type AdsResult = {
