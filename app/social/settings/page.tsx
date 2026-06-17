@@ -603,17 +603,37 @@ function SocialSettingsContent() {
           ) : igReason === "no_ig_account" ? (
             <div className="space-y-3">
               <p className="text-sm text-amber-400/80">
-                Facebook Page is connected but no Instagram Business account is linked to it.
+                Facebook Page is connected but Instagram is not visible via the API yet.
               </p>
               <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-4 space-y-1">
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500 mb-2">How to link Instagram</p>
-                <ol className="text-xs text-zinc-500 space-y-1 list-decimal list-inside">
-                  <li>Go to your Facebook Page → <strong className="text-zinc-400">Settings</strong> → <strong className="text-zinc-400">Linked Accounts</strong></li>
-                  <li>Click <strong className="text-zinc-400">Connect account</strong> next to Instagram</li>
-                  <li>Log in with your Instagram Business or Creator account</li>
-                  <li>Refresh this page — Instagram data will appear automatically</li>
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500 mb-2">
+                  Link Instagram to your Facebook <em>Page</em> (not personal profile)
+                </p>
+                <ol className="text-xs text-zinc-500 space-y-1.5 list-decimal list-inside">
+                  <li>
+                    Go to <strong className="text-zinc-300">facebook.com/One.thousand.tales</strong> → click{" "}
+                    <strong className="text-zinc-300">Manage Page</strong>
+                  </li>
+                  <li>
+                    In the Page menu, go to <strong className="text-zinc-300">Settings</strong> →{" "}
+                    <strong className="text-zinc-300">Linked accounts</strong> →{" "}
+                    <strong className="text-zinc-300">Instagram</strong>
+                  </li>
+                  <li>
+                    Connect <strong className="text-zinc-300">@one.thousand.tales</strong> — it must be a{" "}
+                    <strong className="text-zinc-300">Business or Creator</strong> account, not a personal one
+                  </li>
+                  <li>
+                    If already linked there, the token may lack <code className="text-zinc-400 bg-white/[0.05] px-1 rounded">instagram_basic</code> permission — regenerate{" "}
+                    <code className="text-zinc-400 bg-white/[0.05] px-1 rounded">META_PAGE_ACCESS_TOKEN</code> with that scope added
+                  </li>
+                  <li>Refresh this page after making changes</li>
                 </ol>
               </div>
+              <p className="text-[10px] text-zinc-600">
+                Note: Linking in your personal Facebook Settings → Linked accounts is different — that links Instagram
+                to your personal profile, not your Business Page. The API needs the Page-level link.
+              </p>
             </div>
           ) : (
             <p className="text-sm text-zinc-400">
