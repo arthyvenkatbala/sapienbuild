@@ -97,10 +97,9 @@ export async function GET(request: NextRequest) {
       {
         method:  "POST",
         headers: {
-          Authorization:       `Bearer ${accessToken}`,
-          "developer-token":   devToken,
-          "login-customer-id": customerId,
-          "Content-Type":      "application/json",
+          Authorization:     `Bearer ${accessToken}`,
+          "developer-token": devToken,
+          "Content-Type":    "application/json",
         },
         body:  JSON.stringify({ query }),
         cache: "no-store",
