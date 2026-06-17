@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
   if (devToken) {
     try {
       const custsRes = await fetch(
-        "https://googleads.googleapis.com/v17/customers:listAccessibleCustomers",
+        "https://googleads.googleapis.com/v19/customers:listAccessibleCustomers",
         {
           headers: {
             Authorization:    `Bearer ${tokens.access_token}`,
@@ -65,7 +65,7 @@ export async function GET(request: NextRequest) {
         if (firstResource) {
           const id = firstResource.replace("customers/", "");
           if (!customerId) customerId = id;
-          const custRes = await fetch(`https://googleads.googleapis.com/v17/customers/${id}`, {
+          const custRes = await fetch(`https://googleads.googleapis.com/v19/customers/${id}`, {
             headers: {
               Authorization:    `Bearer ${tokens.access_token}`,
               "developer-token": devToken,
