@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
   try {
     const [insightsRes, campaignsRes] = await Promise.allSettled([
       fetch(`${base}/insights?fields=spend,impressions,clicks,actions&date_preset=${datePreset}&level=account&access_token=${token}`),
-      fetch(`${base}/campaigns?fields=name,status,insights.date_preset(${datePreset}){spend,impressions,clicks,actions}&access_token=${token}&limit=20`),
+      fetch(`${base}/campaigns?fields=name,status,insights.date_preset(${datePreset}){spend,impressions,clicks,actions}&access_token=${token}&limit=50`),
     ]);
 
     let totalSpend = 0, impressions = 0, clicks = 0, leads = 0;
@@ -63,17 +63,20 @@ export async function GET(request: NextRequest) {
         const ld   = (row?.actions ?? [])
           .filter((a) => a.action_type === "lead" || a.action_type === "onsite_conversion.lead_grouped")
           .reduce((s, a) => s + parseInt(a.value, 10), 0);
-        campaigns.push({
-          id:          c.id,
-          name:        c.name,
-          status:      c.status,
-          spend:       sp,
-          impressions: imp,
-          clicks:      cl,
-          leads:       ld,
-          ctr:         imp > 0 ? Math.round((cl / imp) * 10000) / 100 : 0,
-          cpl:         ld > 0 ? Math.round(sp / ld) : 0,
-        });
+        // Only include campaigns that had actual delivery in this period
+        if (imp > 0 || sp > 0) {
+          campaigns.push({
+            id:          c.id,
+            name:        c.name,
+            status:      c.status,
+            spend:       sp,
+            impressions: imp,
+            clicks:      cl,
+            leads:       ld,
+            ctr:         imp > 0 ? Math.round((cl / imp) * 10000) / 100 : 0,
+            cpl:         ld > 0 ? Math.round(sp / ld) : 0,
+          });
+        }
       }
     }
 

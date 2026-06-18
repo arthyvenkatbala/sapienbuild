@@ -11,14 +11,16 @@ import { useToast } from "@/lib/toast";
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface Payment {
-  id:           string;
-  invoice_id:   string;
-  amount:       number;
-  payment_type: string;
-  payment_date: string;
-  method:       string | null;
-  notes:        string | null;
-  created_at:   string;
+  id:               string;
+  invoice_id:       string;
+  amount:           number;
+  payment_type:     string;
+  payment_date:     string;
+  method:           string | null;
+  notes:            string | null;
+  receipt_pdf_data: string | null;
+  receipt_number:   string | null;
+  created_at:       string;
 }
 
 export interface ProjectDocument {
@@ -274,7 +276,10 @@ function RecordPaymentModal({ row, onClose, onSaved }: { row: ProjectRow; onClos
 // ─── Payment History Row ──────────────────────────────────────────────────────
 
 function PaymentHistoryRow({ payment, onDelete }: { payment: Payment; onDelete: (id: string) => void }) {
-  const [deleting, setDeleting] = useState(false);
+  const toast    = useToast();
+  const [deleting,     setDeleting]     = useState(false);
+  const [downloading,  setDownloading]  = useState(false);
+
   const handleDelete = async () => {
     if (!confirm("Remove this payment entry?")) return;
     setDeleting(true);
@@ -282,14 +287,53 @@ function PaymentHistoryRow({ payment, onDelete }: { payment: Payment; onDelete: 
     onDelete(payment.id);
     setDeleting(false);
   };
+
+  const handleDownloadReceipt = async () => {
+    setDownloading(true);
+    try {
+      let pdfData   = payment.receipt_pdf_data;
+      let rcptNumber = payment.receipt_number;
+
+      if (!pdfData) {
+        const res  = await fetch("/api/receipts", {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ payment_id: payment.id }),
+        });
+        const data = await res.json() as { receipt_pdf_data?: string; receipt_number?: string; error?: string };
+        if (!res.ok) { toast(data.error ?? "Receipt generation failed", "error"); return; }
+        pdfData    = data.receipt_pdf_data ?? null;
+        rcptNumber = data.receipt_number   ?? null;
+      }
+
+      if (!pdfData) { toast("Receipt not available", "error"); return; }
+
+      const filename = `OTT-Receipt-${rcptNumber ?? payment.id.slice(-6).toUpperCase()}.pdf`;
+      const link     = document.createElement("a");
+      link.href      = `data:application/pdf;base64,${pdfData}`;
+      link.download  = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch { toast("Download failed", "error"); }
+    finally   { setDownloading(false); }
+  };
+
   return (
-    <div className="grid grid-cols-[80px_1fr_96px_80px_1fr_32px] gap-2 items-center px-4 py-2.5 border-b border-white/[0.03] last:border-0 hover:bg-white/[0.02] group">
+    <div className="grid grid-cols-[80px_1fr_96px_80px_1fr_56px] gap-2 items-center px-4 py-2.5 border-b border-white/[0.03] last:border-0 hover:bg-white/[0.02] group">
       <div className="text-xs text-zinc-500">{fmtDate(payment.payment_date)}</div>
       <div><span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-white/[0.06] text-zinc-400 capitalize">{TYPE_LABEL[payment.payment_type] ?? payment.payment_type}</span></div>
       <div className="text-right text-sm font-semibold text-green-400 tabular-nums">{inr(payment.amount)}</div>
       <div className="text-xs text-zinc-500">{payment.method ?? "—"}</div>
       <div className="text-xs text-zinc-600 truncate">{payment.notes ?? "—"}</div>
-      <div className="flex justify-end">
+      <div className="flex justify-end items-center gap-0.5">
+        <button
+          onClick={handleDownloadReceipt}
+          disabled={downloading}
+          title={payment.receipt_pdf_data ? "Download Receipt" : "Generate & Download Receipt"}
+          className="p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-green-500/10 text-zinc-600 hover:text-green-400 transition-all disabled:opacity-50">
+          {downloading ? <Loader2 size={11} className="animate-spin" /> : <Receipt size={11} />}
+        </button>
         <button onClick={handleDelete} disabled={deleting}
           className="p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-red-500/10 text-zinc-600 hover:text-red-400 transition-all disabled:opacity-50">
           {deleting ? <Loader2 size={11} className="animate-spin" /> : <Trash2 size={11} />}
@@ -617,7 +661,7 @@ export function ProjectPaymentsSection({
                       <div className="mx-5 mb-3 space-y-2">
                         {/* Payment history */}
                         <div className="bg-white/[0.02] border border-white/[0.05] rounded-xl overflow-hidden">
-                          <div className="grid grid-cols-[80px_1fr_96px_80px_1fr_32px] gap-2 px-4 py-2 border-b border-white/[0.05] text-[10px] font-semibold uppercase tracking-widest text-zinc-600">
+                          <div className="grid grid-cols-[80px_1fr_96px_80px_1fr_56px] gap-2 px-4 py-2 border-b border-white/[0.05] text-[10px] font-semibold uppercase tracking-widest text-zinc-600">
                             <div>Date</div><div>Type</div><div className="text-right">Amount</div><div>Method</div><div>Notes</div><div />
                           </div>
                           {row.payments.length === 0 ? (

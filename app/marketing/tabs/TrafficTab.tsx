@@ -25,6 +25,13 @@ interface GscQuery {
   ctr:         number;
 }
 
+interface Ga4Data {
+  connected:  boolean;
+  sessions?:  number;
+  users?:     number;
+  synced_at?: string;
+}
+
 interface ClarityPage {
   url:              string;
   traffic:          number | null;
@@ -334,6 +341,7 @@ export default function TrafficTab({ days }: { days: number }) {
   const router = useRouter();
   const [gsc,     setGsc]     = useState<GscData | null>(null);
   const [queries, setQueries] = useState<GscQuery[]>([]);
+  const [ga4,     setGa4]     = useState<Ga4Data | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -341,9 +349,11 @@ export default function TrafficTab({ days }: { days: number }) {
     Promise.allSettled([
       fetch(`/api/marketing/gsc?days=${days}`).then((r) => r.json()),
       fetch(`/api/marketing/gsc-queries?days=${days}`).then((r) => r.json()),
-    ]).then(([gscRes, queriesRes]) => {
-      if (gscRes.status === "fulfilled") setGsc(gscRes.value as GscData);
+      fetch(`/api/marketing/ga4?days=${days}`).then((r) => r.json()),
+    ]).then(([gscRes, queriesRes, ga4Res]) => {
+      if (gscRes.status === "fulfilled")     setGsc(gscRes.value as GscData);
       if (queriesRes.status === "fulfilled") setQueries((queriesRes.value as { queries: GscQuery[] }).queries ?? []);
+      if (ga4Res.status === "fulfilled")     setGa4(ga4Res.value as Ga4Data);
       setLoading(false);
     });
   }, [days]);
@@ -357,8 +367,13 @@ export default function TrafficTab({ days }: { days: number }) {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <StatCard
           title="Website Sessions (GA4)"
-          placeholder="Connect GA4 property to see session data"
-          badge="Tag Active"
+          value={!loading && ga4?.connected && ga4.sessions !== undefined
+            ? ga4.sessions.toLocaleString()
+            : undefined}
+          subtitle={ga4?.connected && ga4.synced_at ? `last ${days} days` : undefined}
+          placeholder={!loading && !ga4?.connected
+            ? "Connect GA4 in Settings to see session data"
+            : undefined}
         />
         <StatCard
           title="Search Clicks (GSC)"

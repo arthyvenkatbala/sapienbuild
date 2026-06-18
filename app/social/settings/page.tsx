@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import {
   Save, Play, Loader2, Check, Folder, Clock, X, Plus,
   PlayCircle, Settings2, Calendar, Search, MapPin, Users,
+  BarChart2, TrendingUp, Share2, Camera, Target,
 } from "lucide-react";
 import { useToast } from "@/lib/toast";
 
@@ -69,9 +70,25 @@ function SocialSettingsContent() {
   const [gscSiteUrl,   setGscSiteUrl]   = useState<string | null>(null);
   const [gmbConnected,  setGmbConnected]  = useState(false);
   const [gmbLocation,   setGmbLocation]   = useState<string | null>(null);
-  const [calConnected,  setCalConnected]  = useState(false);
-  const [calExpiry,     setCalExpiry]     = useState<string | null>(null);
-  const [newHashtag,   setNewHashtag]   = useState("");
+  const [calConnected,    setCalConnected]    = useState(false);
+  const [calExpiry,       setCalExpiry]       = useState<string | null>(null);
+  const [ga4Connected,    setGa4Connected]    = useState(false);
+  const [ga4PropertyId,   setGa4PropertyId]   = useState<string | null>(null);
+  const [gadsConnected,   setGadsConnected]   = useState(false);
+  const [gadsCustomerId,  setGadsCustomerId]  = useState<string | null>(null);
+  const [gadsAccountName, setGadsAccountName] = useState<string | null>(null);
+  const [fbConnected,     setFbConnected]     = useState(false);
+  const [fbPageName,      setFbPageName]      = useState<string | null>(null);
+  const [fbFollowers,     setFbFollowers]     = useState<number | null>(null);
+  const [igConnected,     setIgConnected]     = useState(false);
+  const [igUsername,      setIgUsername]      = useState<string | null>(null);
+  const [igFollowers,     setIgFollowers]     = useState<number | null>(null);
+  const [igReason,        setIgReason]        = useState<string | null>(null);
+  const [pixelConfigured, setPixelConfigured] = useState(false);
+  const [pixelId,         setPixelId]         = useState<string | null>(null);
+  const [pixelName,       setPixelName]       = useState<string | null>(null);
+  const [pixelLastFired,  setPixelLastFired]  = useState<string | null>(null);
+  const [newHashtag,      setNewHashtag]      = useState("");
   const [profiles,      setProfiles]      = useState<Profile[]>([]);
   const [savingRoleId,  setSavingRoleId]  = useState<string | null>(null);
 
@@ -80,13 +97,18 @@ function SocialSettingsContent() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [settingsRes, runsRes, ytRes, gscRes, gmbRes, calRes, profilesRes] = await Promise.all([
+      const [settingsRes, runsRes, ytRes, gscRes, gmbRes, calRes, ga4Res, gadsRes, fbRes, igRes, pixelRes, profilesRes] = await Promise.all([
         fetch("/api/agent/settings"),
         fetch("/api/agent/runs?limit=1"),
         fetch("/api/youtube/status"),
         fetch("/api/gsc/status"),
         fetch("/api/gmb/status"),
         fetch("/api/calendar/status"),
+        fetch("/api/ga4/status"),
+        fetch("/api/google-ads/status"),
+        fetch("/api/marketing/facebook?days=7"),
+        fetch("/api/marketing/instagram?days=7"),
+        fetch("/api/marketing/pixel?days=7"),
         fetch("/api/admin/profiles"),
       ]);
 
@@ -134,6 +156,42 @@ function SocialSettingsContent() {
         setCalExpiry(d.expiry ?? null);
       }
 
+      if (fbRes.ok) {
+        const d = await fbRes.json() as { connected: boolean; name?: string; followers?: number };
+        setFbConnected(d.connected);
+        setFbPageName(d.name ?? null);
+        setFbFollowers(d.followers ?? null);
+      }
+
+      if (igRes.ok) {
+        const d = await igRes.json() as { connected: boolean; username?: string | null; followers?: number; reason?: string };
+        setIgConnected(d.connected);
+        setIgUsername(d.username ?? null);
+        setIgFollowers(d.followers ?? null);
+        setIgReason(d.reason ?? null);
+      }
+
+      if (pixelRes.ok) {
+        const d = await pixelRes.json() as { configured: boolean; pixelId?: string; pixelName?: string | null; lastFiredTime?: string | null };
+        setPixelConfigured(d.configured);
+        setPixelId(d.pixelId ?? null);
+        setPixelName(d.pixelName ?? null);
+        setPixelLastFired(d.lastFiredTime ?? null);
+      }
+
+      if (ga4Res.ok) {
+        const d = await ga4Res.json() as { connected: boolean; property_id?: string | null };
+        setGa4Connected(d.connected);
+        setGa4PropertyId(d.property_id ?? null);
+      }
+
+      if (gadsRes.ok) {
+        const d = await gadsRes.json() as { connected: boolean; customer_id?: string | null; account_name?: string | null };
+        setGadsConnected(d.connected);
+        setGadsCustomerId(d.customer_id ?? null);
+        setGadsAccountName(d.account_name ?? null);
+      }
+
       if (profilesRes.ok) {
         const d = await profilesRes.json() as { profiles?: Profile[] };
         setProfiles(d.profiles ?? []);
@@ -162,6 +220,14 @@ function SocialSettingsContent() {
     const calStatus = searchParams.get("calendar");
     if (calStatus === "connected") toast("Google Calendar connected!");
     if (calStatus === "error")     toast("Google Calendar connection failed", "error");
+
+    const ga4Status = searchParams.get("ga4");
+    if (ga4Status === "connected") toast("Google Analytics (GA4) connected!");
+    if (ga4Status === "error")     toast("GA4 connection failed", "error");
+
+    const gadsStatus = searchParams.get("google-ads");
+    if (gadsStatus === "connected") toast("Google Ads connected!");
+    if (gadsStatus === "error")     toast("Google Ads connection failed", "error");
   }, [loadData, searchParams, toast]);
 
   // ── Save settings ──────────────────────────────────────────────────────────
@@ -487,7 +553,128 @@ function SocialSettingsContent() {
           )}
         </section>
 
-        {/* ─── F. Google Search Console ────────────────────────────────────── */}
+        {/* ─── F. Facebook Page ────────────────────────────────────────────── */}
+        <section className="bg-[#111114] border border-white/[0.07] rounded-2xl p-6">
+          <SectionHead icon={Share2} title="Facebook Page" />
+          {fbConnected ? (
+            <div>
+              <p className="flex items-center gap-2 text-sm text-green-400 font-medium">
+                <Check size={14} /> Facebook Page connected
+              </p>
+              {fbPageName  && <p className="text-xs text-zinc-500 mt-0.5">Page: {fbPageName}</p>}
+              {fbFollowers !== null && <p className="text-xs text-zinc-600">{fbFollowers.toLocaleString()} followers</p>}
+              <p className="text-xs text-zinc-600 mt-2">
+                Managed via <code className="text-zinc-400 bg-white/[0.05] px-1 rounded">META_PAGE_ID</code> and{" "}
+                <code className="text-zinc-400 bg-white/[0.05] px-1 rounded">META_PAGE_ACCESS_TOKEN</code> environment variables.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-sm text-zinc-400">
+                Facebook Page is not connected. Follower counts, reach, and engagement will show in the Marketing → Social tab once configured.
+              </p>
+              <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-4 space-y-2">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">How to connect</p>
+                <ol className="text-xs text-zinc-500 space-y-1 list-decimal list-inside">
+                  <li>Go to Meta Developer Console → your app → Page Access Tokens</li>
+                  <li>Copy your Page ID and a long-lived Page Access Token with <code className="text-zinc-400">pages_read_engagement</code> permission</li>
+                  <li>Add <code className="text-zinc-400">META_PAGE_ID</code> and <code className="text-zinc-400">META_PAGE_ACCESS_TOKEN</code> to Vercel Environment Variables</li>
+                  <li>Redeploy or wait for the next deployment</li>
+                </ol>
+              </div>
+            </div>
+          )}
+        </section>
+
+        {/* ─── G. Instagram Business ───────────────────────────────────────── */}
+        <section className="bg-[#111114] border border-white/[0.07] rounded-2xl p-6">
+          <SectionHead icon={Camera} title="Instagram Business" />
+          {igConnected ? (
+            <div>
+              <p className="flex items-center gap-2 text-sm text-green-400 font-medium">
+                <Check size={14} /> Instagram Business connected
+              </p>
+              {igUsername  && <p className="text-xs text-zinc-500 mt-0.5">@{igUsername}</p>}
+              {igFollowers !== null && <p className="text-xs text-zinc-600">{igFollowers.toLocaleString()} followers</p>}
+              <p className="text-xs text-zinc-600 mt-2">
+                Pulled from the Instagram Business account linked to your Facebook Page.
+              </p>
+            </div>
+          ) : igReason === "no_ig_account" ? (
+            <div className="space-y-3">
+              <p className="text-sm text-amber-400/80">
+                Facebook Page is connected but Instagram is not visible via the API yet.
+              </p>
+              <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-4 space-y-1">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500 mb-2">
+                  Link Instagram to your Facebook <em>Page</em> (not personal profile)
+                </p>
+                <ol className="text-xs text-zinc-500 space-y-1.5 list-decimal list-inside">
+                  <li>
+                    Go to <strong className="text-zinc-300">facebook.com/One.thousand.tales</strong> → click{" "}
+                    <strong className="text-zinc-300">Manage Page</strong>
+                  </li>
+                  <li>
+                    In the Page menu, go to <strong className="text-zinc-300">Settings</strong> →{" "}
+                    <strong className="text-zinc-300">Linked accounts</strong> →{" "}
+                    <strong className="text-zinc-300">Instagram</strong>
+                  </li>
+                  <li>
+                    Connect <strong className="text-zinc-300">@one.thousand.tales</strong> — it must be a{" "}
+                    <strong className="text-zinc-300">Business or Creator</strong> account, not a personal one
+                  </li>
+                  <li>
+                    If already linked there, the token may lack <code className="text-zinc-400 bg-white/[0.05] px-1 rounded">instagram_basic</code> permission — regenerate{" "}
+                    <code className="text-zinc-400 bg-white/[0.05] px-1 rounded">META_PAGE_ACCESS_TOKEN</code> with that scope added
+                  </li>
+                  <li>Refresh this page after making changes</li>
+                </ol>
+              </div>
+              <p className="text-[10px] text-zinc-600">
+                Note: Linking in your personal Facebook Settings → Linked accounts is different — that links Instagram
+                to your personal profile, not your Business Page. The API needs the Page-level link.
+              </p>
+            </div>
+          ) : (
+            <p className="text-sm text-zinc-400">
+              Connect your Facebook Page first (section above), then link an Instagram Business account to it.
+            </p>
+          )}
+        </section>
+
+        {/* ─── H. FB Pixel ─────────────────────────────────────────────────── */}
+        <section className="bg-[#111114] border border-white/[0.07] rounded-2xl p-6">
+          <SectionHead icon={Target} title="Facebook Pixel" />
+          {pixelConfigured ? (
+            <div>
+              <p className="flex items-center gap-2 text-sm text-green-400 font-medium">
+                <Check size={14} /> Pixel configured
+              </p>
+              {pixelId   && <p className="text-xs text-zinc-500 mt-0.5">Pixel ID: {pixelId}{pixelName ? ` (${pixelName})` : ""}</p>}
+              {pixelLastFired && (
+                <p className="text-xs text-zinc-600 mt-0.5">
+                  Last event: {new Date(pixelLastFired).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })} IST
+                </p>
+              )}
+              <p className="text-xs text-zinc-600 mt-2">
+                Ad-attributed page views, leads, and purchases appear in Marketing → Social tab.
+                Managed via <code className="text-zinc-400 bg-white/[0.05] px-1 rounded">META_PIXEL_ID</code> or{" "}
+                <code className="text-zinc-400 bg-white/[0.05] px-1 rounded">NEXT_PUBLIC_META_PIXEL_ID</code> environment variable.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-sm text-zinc-400">
+                Facebook Pixel is not configured. Set <code className="text-zinc-400 bg-white/[0.05] px-1 rounded">META_PIXEL_ID</code> in Vercel Environment Variables to enable event tracking visibility.
+              </p>
+              <p className="text-xs text-zinc-600">
+                The Pixel script must also be installed on your website (onethousandtales.com). If it's already installed, add the Pixel ID env var and redeploy.
+              </p>
+            </div>
+          )}
+        </section>
+
+        {/* ─── J. Google Search Console ────────────────────────────────────── */}
         <section className="bg-[#111114] border border-white/[0.07] rounded-2xl p-6">
           <SectionHead icon={Search} title="Google Search Console" />
           {gscConnected ? (
@@ -603,7 +790,96 @@ function SocialSettingsContent() {
           )}
         </section>
 
-        {/* ─── I. Team Roles ───────────────────────────────────────────────── */}
+        {/* ─── I. Google Analytics (GA4) ──────────────────────────────────── */}
+        <section className="bg-[#111114] border border-white/[0.07] rounded-2xl p-6">
+          <SectionHead icon={BarChart2} title="Google Analytics (GA4)" />
+          {ga4Connected ? (
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="flex items-center gap-2 text-sm text-green-400 font-medium">
+                  <Check size={14} /> GA4 connected
+                </p>
+                {ga4PropertyId && (
+                  <p className="text-xs text-zinc-500 mt-0.5">Property: {ga4PropertyId}</p>
+                )}
+                <p className="text-xs text-zinc-600 mt-1">
+                  Session, user, and traffic source data will appear in the Marketing → Traffic tab.
+                </p>
+              </div>
+              <a
+                href="/api/ga4/auth"
+                className="text-xs text-zinc-600 hover:text-zinc-400 underline transition-colors"
+              >
+                Reconnect
+              </a>
+            </div>
+          ) : (
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-sm text-zinc-400">
+                  Connect Google Analytics to pull live session and traffic data into the Marketing dashboard.
+                </p>
+                <p className="text-[10px] text-zinc-600 mt-1.5">
+                  Requires the Analytics Data API enabled in Google Cloud and read access to your GA4 property.
+                </p>
+              </div>
+              <a
+                href="/api/ga4/auth"
+                className="shrink-0 flex items-center gap-2 text-xs font-medium text-white bg-orange-600 hover:bg-orange-500 px-4 py-2 rounded-xl transition-all"
+              >
+                <BarChart2 size={13} /> Connect GA4
+              </a>
+            </div>
+          )}
+        </section>
+
+        {/* ─── J. Google Ads ───────────────────────────────────────────────── */}
+        <section className="bg-[#111114] border border-white/[0.07] rounded-2xl p-6">
+          <SectionHead icon={TrendingUp} title="Google Ads" />
+          {gadsConnected ? (
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="flex items-center gap-2 text-sm text-green-400 font-medium">
+                  <Check size={14} /> Google Ads connected
+                </p>
+                {gadsAccountName && (
+                  <p className="text-xs text-zinc-500 mt-0.5">Account: {gadsAccountName}</p>
+                )}
+                {gadsCustomerId && (
+                  <p className="text-xs text-zinc-600">Customer ID: {gadsCustomerId}</p>
+                )}
+                <p className="text-xs text-zinc-600 mt-1">
+                  Campaign spend, clicks, and conversions will appear in the Marketing → Ads tab.
+                </p>
+              </div>
+              <a
+                href="/api/google-ads/auth"
+                className="text-xs text-zinc-600 hover:text-zinc-400 underline transition-colors"
+              >
+                Reconnect
+              </a>
+            </div>
+          ) : (
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-sm text-zinc-400">
+                  Connect Google Ads to pull live campaign performance data into the Marketing dashboard.
+                </p>
+                <p className="text-[10px] text-zinc-600 mt-1.5">
+                  Requires Google Ads API access and a developer token. Your existing Customer ID 379-721-4027 will be auto-detected.
+                </p>
+              </div>
+              <a
+                href="/api/google-ads/auth"
+                className="shrink-0 flex items-center gap-2 text-xs font-medium text-white bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded-xl transition-all"
+              >
+                <TrendingUp size={13} /> Connect Google Ads
+              </a>
+            </div>
+          )}
+        </section>
+
+        {/* ─── L. Team Roles ───────────────────────────────────────────────── */}
         <section className="bg-[#111114] border border-white/[0.07] rounded-2xl p-6">
           <SectionHead icon={Users} title="Team Roles" />
           <p className="text-xs text-zinc-500 mb-4">
